@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "MetricValue": {
+      "additionalProperties": false,
+      "properties": {
+        "capture_method": {
+          "enum": [
+            "SYNTHETIC",
+            "NETWORK_RESPONSE",
+            "DOM",
+            "MIXED"
+          ],
+          "title": "Capture Method",
+          "type": "string"
+        },
+        "observed_at": {
+          "format": "date-time",
+          "title": "Observed At",
+          "type": "string"
+        },
+        "precision": {
+          "enum": [
+            "EXACT",
+            "APPROXIMATE"
+          ],
+          "title": "Precision",
+          "type": "string"
+        },
+        "source_updated_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Updated At"
+        },
+        "unit": {
+          "enum": [
+            "CNY_CENT",
+            "COUNT",
+            "RATIO"
+          ],
+          "title": "Unit",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Value"
+        }
+      },
+      "required": [
+        "value",
+        "unit",
+        "observed_at",
+        "capture_method",
+        "precision"
+      ],
+      "title": "MetricValue",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "metrics": {
+      "additionalProperties": {
+        "anyOf": [
+          {
+            "$ref": "#/$defs/MetricValue"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "title": "Metrics",
+      "type": "object"
+    }
+  },
+  "required": [
+    "metrics"
+  ],
+  "title": "PromotionOverviewPayload",
+  "type": "object"
+}

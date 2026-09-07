@@ -1,0 +1,27 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "committed_at": {
+      "format": "date-time",
+      "title": "Committed At",
+      "type": "string"
+    },
+    "manifest_sha256": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Manifest Sha256",
+      "type": "string"
+    },
+    "snapshot_id": {
+      "pattern": "^s_[0-9a-f]{32}$",
+      "title": "Snapshot Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "snapshot_id",
+    "manifest_sha256",
+    "committed_at"
+  ],
+  "title": "CommitRecord",
+  "type": "object"
+}

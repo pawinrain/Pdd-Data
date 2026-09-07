@@ -1,0 +1,33 @@
+[service]
+name = "pdd-data-mcp"
+transport = "stdio"
+mode = "read_only"
+test_mode = true
+
+[storage]
+backend = "local_files"
+data_root = "../examples/demo-output/manual/data"
+runtime_root = "../examples/demo-output/manual/runtime"
+partition_timezone = "Asia/Shanghai"
+layout_version = "1"
+max_bytes = 1073741824
+min_free_bytes = 0
+retain_committed_snapshots = true
+raw_response_persistence = false
+
+[collection]
+max_concurrency = 1
+max_products = 50
+connect_timeout_ms = 10000
+collection_timeout_ms = 90000
+min_interval_seconds = 0
+platform_auto_retries = 0
+max_mcp_response_bytes = 262144
+
+[[connections]]
+connection_id = "conn_synthetic_01"
+store_id = "st_synthetic_001"
+cdp_endpoint = ""
+expected_platform_store_id = ""
+real_collection_enabled = false
+synthetic_enabled = true

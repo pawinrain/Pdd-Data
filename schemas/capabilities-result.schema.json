@@ -1,0 +1,64 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "datasets": {
+      "additionalProperties": {
+        "enum": [
+          "SYNTHETIC_TEST_ONLY",
+          "REAL_PROMOTION_TODAY",
+          "REAL_STORE_TODAY",
+          "REAL_PRODUCT_CATALOG",
+          "REAL_INVENTORY",
+          "CONFIGURED_NOT_VERIFIED",
+          "UNAVAILABLE"
+        ],
+        "type": "string"
+      },
+      "title": "Datasets",
+      "type": "object"
+    },
+    "real_collection": {
+      "enum": [
+        "DISABLED",
+        "CONFIGURED_NOT_VERIFIED",
+        "AVAILABLE"
+      ],
+      "title": "Real Collection",
+      "type": "string"
+    },
+    "service": {
+      "const": "pdd-data-mcp",
+      "default": "pdd-data-mcp",
+      "title": "Service",
+      "type": "string"
+    },
+    "storage": {
+      "const": "local_files",
+      "default": "local_files",
+      "title": "Storage",
+      "type": "string"
+    },
+    "synthetic_test_mode": {
+      "title": "Synthetic Test Mode",
+      "type": "boolean"
+    },
+    "transport": {
+      "const": "stdio",
+      "default": "stdio",
+      "title": "Transport",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "version",
+    "synthetic_test_mode",
+    "real_collection",
+    "datasets"
+  ],
+  "title": "CapabilitiesResult",
+  "type": "object"
+}

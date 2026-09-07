@@ -1,0 +1,96 @@
+{
+  "$defs": {
+    "WindowKind": {
+      "enum": [
+        "TODAY",
+        "YESTERDAY",
+        "LAST_7_DAYS",
+        "LAST_30_DAYS",
+        "POINT_IN_TIME",
+        "CUSTOM",
+        "UNKNOWN"
+      ],
+      "title": "WindowKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "attribution": {
+      "default": "PLATFORM_DEFAULT",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+      "title": "Attribution",
+      "type": "string"
+    },
+    "business_date": {
+      "format": "date",
+      "title": "Business Date",
+      "type": "string"
+    },
+    "currency": {
+      "default": "CNY",
+      "pattern": "^[A-Z]{3}$",
+      "title": "Currency",
+      "type": "string"
+    },
+    "end": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "End"
+    },
+    "filters": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Filters",
+      "type": "object"
+    },
+    "kind": {
+      "$ref": "#/$defs/WindowKind"
+    },
+    "object_type": {
+      "default": "ACCOUNT_ALL",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+      "title": "Object Type",
+      "type": "string"
+    },
+    "start": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Start"
+    },
+    "timezone": {
+      "default": "Asia/Shanghai",
+      "title": "Timezone",
+      "type": "string"
+    },
+    "version": {
+      "default": "1",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+/-]{0,63}$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "business_date"
+  ],
+  "title": "Scope",
+  "type": "object"
+}

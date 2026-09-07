@@ -1,0 +1,123 @@
+{
+  "$defs": {
+    "CoverageStatus": {
+      "enum": [
+        "COMPLETE",
+        "TRUNCATED",
+        "PARTIAL",
+        "UNKNOWN"
+      ],
+      "title": "CoverageStatus",
+      "type": "string"
+    },
+    "DatasetType": {
+      "enum": [
+        "store_overview",
+        "product_catalog",
+        "inventory",
+        "promotion_overview",
+        "product_metrics",
+        "campaign_metrics",
+        "activity_catalog"
+      ],
+      "title": "DatasetType",
+      "type": "string"
+    },
+    "SnapshotSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "captured_at": {
+          "format": "date-time",
+          "title": "Captured At",
+          "type": "string"
+        },
+        "committed_at": {
+          "format": "date-time",
+          "title": "Committed At",
+          "type": "string"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CoverageStatus"
+        },
+        "dataset_type": {
+          "$ref": "#/$defs/DatasetType"
+        },
+        "quality_status": {
+          "enum": [
+            "VALID",
+            "INVALID"
+          ],
+          "title": "Quality Status",
+          "type": "string"
+        },
+        "record_count": {
+          "title": "Record Count",
+          "type": "integer"
+        },
+        "scope_key": {
+          "title": "Scope Key",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "pattern": "^s_[0-9a-f]{32}$",
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "source": {
+          "enum": [
+            "SYNTHETIC",
+            "PDD_BROWSER_CDP"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "store_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "title": "Store Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "snapshot_id",
+        "store_id",
+        "dataset_type",
+        "scope_key",
+        "captured_at",
+        "committed_at",
+        "source",
+        "quality_status",
+        "coverage",
+        "record_count"
+      ],
+      "title": "SnapshotSummary",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "items": {
+      "items": {
+        "$ref": "#/$defs/SnapshotSummary"
+      },
+      "title": "Items",
+      "type": "array"
+    },
+    "next_cursor": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Next Cursor"
+    }
+  },
+  "required": [
+    "items"
+  ],
+  "title": "ListSnapshotsResult",
+  "type": "object"
+}

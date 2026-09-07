@@ -1,0 +1,139 @@
+[service]
+name = "pdd-data-mcp"
+transport = "stdio"
+mode = "read_only"
+test_mode = false
+
+[storage]
+backend = "local_files"
+data_root = "../stage-d-real-data"
+runtime_root = "../stage-d-real-runtime"
+partition_timezone = "Asia/Shanghai"
+layout_version = "1"
+max_bytes = 10737418240
+min_free_bytes = 1073741824
+retain_committed_snapshots = true
+raw_response_persistence = false
+
+[collection]
+max_concurrency = 1
+max_products = 50
+connect_timeout_ms = 10000
+collection_timeout_ms = 90000
+min_interval_seconds = 60
+platform_auto_retries = 0
+max_mcp_response_bytes = 262144
+max_browser_response_bytes = 1048576
+max_inflight_responses = 4
+
+[[connections]]
+connection_id = "conn_pdd_current_01"
+store_id = "st_pdd_current_01"
+cdp_endpoint = "http://127.0.0.1:9222"
+expected_platform_store_id = ""
+expected_platform_store_id_sha256 = ""
+target_page_url = "https://yingxiao.pinduoduo.com/mains/promotionOverview"
+real_collection_enabled = false
+synthetic_enabled = false
+
+[connections.store_overview_adapter]
+verified = false
+data_source = "NETWORK_RESPONSE"
+target_page_url = "https://mms.pinduoduo.com/home"
+response_host = ""
+response_path = ""
+response_method = "POST"
+business_success_path = ""
+business_success_value = true
+identity_source = "MERCHANT_PAGE_STATE_SHA256"
+identity_page_url = "https://mms.pinduoduo.com/mallcenter/info/basic"
+identity_verification_reference = ""
+business_date_path = ""
+business_date_format = "ISO_DATE"
+metrics = {}
+dom_business_date_selector = ""
+dom_today_label = ""
+dom_business_date_format = "EXACT_LABEL"
+parser_version = ""
+trigger = "RELOAD"
+
+[connections.store_overview_adapter.discovery]
+enabled = false
+observe_seconds = 20
+max_metadata_entries = 300
+candidate_body_probe_enabled = false
+candidate_response_host = ""
+candidate_response_paths = []
+candidate_response_method = "POST"
+
+[connections.product_catalog_adapter]
+verified = false
+data_source = "NETWORK_RESPONSE"
+target_page_url = "https://mms.pinduoduo.com/goods/goods_list"
+response_host = ""
+response_path = ""
+response_method = "POST"
+business_success_path = ""
+business_success_value = true
+identity_source = "MERCHANT_PAGE_STATE_SHA256"
+identity_page_url = "https://mms.pinduoduo.com/mallcenter/info/basic"
+identity_verification_reference = ""
+list_path = ""
+total_path = ""
+product_id_path = ""
+item_platform_store_id_path = ""
+product_name_path = ""
+status_path = ""
+status_map = {}
+price_path = ""
+price_unit = "CNY_CENT"
+sku_count_path = ""
+created_at_path = ""
+published_at_path = ""
+dom_total_selector = ""
+next_page_selector = ""
+parser_version = ""
+trigger = "RELOAD"
+
+[connections.product_catalog_adapter.discovery]
+enabled = false
+observe_seconds = 20
+max_metadata_entries = 300
+candidate_body_probe_enabled = false
+candidate_response_host = ""
+candidate_response_paths = []
+candidate_response_method = "POST"
+
+[connections.inventory_adapter]
+verified = false
+data_source = "NETWORK_RESPONSE"
+target_page_url = "https://mms.pinduoduo.com/goods/goods_list"
+response_host = ""
+response_path = ""
+response_method = "POST"
+business_success_path = ""
+business_success_value = true
+identity_source = "MERCHANT_PAGE_STATE_SHA256"
+identity_page_url = "https://mms.pinduoduo.com/mallcenter/info/basic"
+identity_verification_reference = ""
+list_path = ""
+total_path = ""
+product_id_path = ""
+item_platform_store_id_path = ""
+inventory_path = ""
+granularity = "PRODUCT"
+sku_list_path = ""
+sku_id_path = ""
+dom_total_selector = ""
+next_page_selector = ""
+parser_version = ""
+trigger = "RELOAD"
+
+[connections.inventory_adapter.discovery]
+enabled = false
+observe_seconds = 20
+max_metadata_entries = 300
+candidate_body_probe_enabled = false
+candidate_response_host = ""
+candidate_response_paths = []
+candidate_response_method = "POST"

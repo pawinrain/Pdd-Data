@@ -1,0 +1,89 @@
+[service]
+name = "pdd-data-mcp"
+transport = "stdio"
+mode = "read_only"
+test_mode = false
+
+[storage]
+backend = "local_files"
+data_root = "../real-data"
+runtime_root = "../real-runtime"
+partition_timezone = "Asia/Shanghai"
+layout_version = "1"
+max_bytes = 10737418240
+min_free_bytes = 1073741824
+retain_committed_snapshots = true
+raw_response_persistence = false
+
+[collection]
+max_concurrency = 1
+max_products = 50
+connect_timeout_ms = 10000
+collection_timeout_ms = 90000
+min_interval_seconds = 60
+platform_auto_retries = 0
+max_mcp_response_bytes = 262144
+max_browser_response_bytes = 1048576
+max_inflight_responses = 4
+
+[[connections]]
+connection_id = "conn_pdd_promotion_01"
+store_id = "st_real_001"
+cdp_endpoint = "http://127.0.0.1:9222"
+expected_platform_store_id = "REPLACE_WITH_VERIFIED_PLATFORM_STORE_ID"
+expected_platform_store_id_sha256 = ""
+target_page_url = "https://yingxiao.pinduoduo.com/mains/promotionOverview"
+real_collection_enabled = false
+synthetic_enabled = false
+
+[connections.discovery]
+enabled = false
+observe_seconds = 20
+max_metadata_entries = 100
+candidate_body_probe_enabled = false
+candidate_response_host = ""
+candidate_response_paths = []
+candidate_response_method = "POST"
+
+[connections.promotion_adapter]
+verified = false
+response_host = ""
+response_path = ""
+response_method = "GET"
+response_http_status = 200
+response_content_type = "application/json"
+business_success_path = ""
+business_success_value = true
+platform_store_id_path = ""
+identity_response_host = ""
+identity_response_path = ""
+identity_response_method = "POST"
+identity_response_http_status = 200
+identity_business_success_path = ""
+identity_business_success_value = true
+identity_platform_store_id_path = ""
+identity_verification_method = "CONFIG_EXACT_ID"
+identity_verification_reference = ""
+metric_list_path = ""
+metric_item_business_date_path = ""
+metric_item_date_format = "ISO_DATE"
+business_date_path = ""
+ad_spend_path = ""
+ad_spend_unit = "CNY_CENT"
+ad_spend_unit_path = ""
+ad_spend_expected_unit_value = ""
+source_updated_at_path = ""
+parser_version = ""
+trigger = "MANUAL"
+dom_fallback_enabled = false
+dom_store_id_selector = ""
+dom_store_id_attribute = ""
+dom_business_date_selector = ""
+dom_business_date_attribute = ""
+dom_today_label = ""
+dom_ad_spend_selector = ""
+dom_ad_spend_attribute = ""
+dom_ad_spend_unit = "CNY"
+login_selector = ""
+captcha_selector = ""
+error_selector = ""

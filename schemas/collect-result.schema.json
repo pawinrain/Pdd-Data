@@ -1,0 +1,144 @@
+{
+  "$defs": {
+    "CoverageStatus": {
+      "enum": [
+        "COMPLETE",
+        "TRUNCATED",
+        "PARTIAL",
+        "UNKNOWN"
+      ],
+      "title": "CoverageStatus",
+      "type": "string"
+    },
+    "DatasetType": {
+      "enum": [
+        "store_overview",
+        "product_catalog",
+        "inventory",
+        "promotion_overview",
+        "product_metrics",
+        "campaign_metrics",
+        "activity_catalog"
+      ],
+      "title": "DatasetType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "batch_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Batch Id"
+    },
+    "captured": {
+      "default": 0,
+      "title": "Captured",
+      "type": "integer"
+    },
+    "committed": {
+      "title": "Committed",
+      "type": "boolean"
+    },
+    "coverage": {
+      "$ref": "#/$defs/CoverageStatus",
+      "default": "UNKNOWN"
+    },
+    "dataset_type": {
+      "$ref": "#/$defs/DatasetType"
+    },
+    "error_code": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error Code"
+    },
+    "idempotent_replay": {
+      "default": false,
+      "title": "Idempotent Replay",
+      "type": "boolean"
+    },
+    "snapshot_id": {
+      "anyOf": [
+        {
+          "pattern": "^s_[0-9a-f]{32}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Snapshot Id"
+    },
+    "status": {
+      "enum": [
+        "SUCCEEDED",
+        "PARTIAL",
+        "FAILED",
+        "BUSY",
+        "INTERRUPTED",
+        "REAL_COLLECTION_DISABLED",
+        "DATASET_UNVERIFIED",
+        "ADAPTER_UNVERIFIED",
+        "CDP_UNAVAILABLE",
+        "TARGET_PAGE_NOT_FOUND",
+        "AUTH_REQUIRED",
+        "IDENTITY_UNVERIFIED",
+        "IDENTITY_MISMATCH",
+        "PLATFORM_ERROR",
+        "TIME_SCOPE_UNVERIFIED",
+        "UNIT_UNVERIFIED",
+        "DATA_MISMATCH",
+        "CAPTURE_TIMEOUT"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "total_observed": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Total Observed"
+    },
+    "truncated": {
+      "default": false,
+      "title": "Truncated",
+      "type": "boolean"
+    },
+    "warnings": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "required": [
+    "status",
+    "committed",
+    "dataset_type"
+  ],
+  "title": "CollectResult",
+  "type": "object"
+}

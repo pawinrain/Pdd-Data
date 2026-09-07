@@ -1,0 +1,626 @@
+{
+  "$defs": {
+    "Coverage": {
+      "additionalProperties": false,
+      "properties": {
+        "captured": {
+          "minimum": 0,
+          "title": "Captured",
+          "type": "integer"
+        },
+        "coverage": {
+          "$ref": "#/$defs/CoverageStatus"
+        },
+        "limit": {
+          "maximum": 200,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "pages_read": {
+          "minimum": 0,
+          "title": "Pages Read",
+          "type": "integer"
+        },
+        "stop_reason": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Stop Reason"
+        },
+        "total_observed": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Total Observed"
+        },
+        "truncated": {
+          "title": "Truncated",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "captured",
+        "limit",
+        "pages_read",
+        "coverage",
+        "truncated"
+      ],
+      "title": "Coverage",
+      "type": "object"
+    },
+    "CoverageStatus": {
+      "enum": [
+        "COMPLETE",
+        "TRUNCATED",
+        "PARTIAL",
+        "UNKNOWN"
+      ],
+      "title": "CoverageStatus",
+      "type": "string"
+    },
+    "DatasetType": {
+      "enum": [
+        "store_overview",
+        "product_catalog",
+        "inventory",
+        "promotion_overview",
+        "product_metrics",
+        "campaign_metrics",
+        "activity_catalog"
+      ],
+      "title": "DatasetType",
+      "type": "string"
+    },
+    "FileDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "bytes": {
+          "minimum": 0,
+          "title": "Bytes",
+          "type": "integer"
+        },
+        "name": {
+          "enum": [
+            "data.json",
+            "records.jsonl",
+            "validation.json"
+          ],
+          "title": "Name",
+          "type": "string"
+        },
+        "records": {
+          "minimum": 0,
+          "title": "Records",
+          "type": "integer"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "sha256",
+        "bytes",
+        "records"
+      ],
+      "title": "FileDescriptor",
+      "type": "object"
+    },
+    "IdentityEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "dom_attribute": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dom Attribute"
+        },
+        "dom_selector": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Dom Selector"
+        },
+        "evidence_source": {
+          "enum": [
+            "NETWORK_RESPONSE",
+            "DOM"
+          ],
+          "title": "Evidence Source",
+          "type": "string"
+        },
+        "expected_platform_store_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Expected Platform Store Id",
+          "type": "string"
+        },
+        "independent_verification_method": {
+          "default": "CONFIG_EXACT_ID",
+          "enum": [
+            "CONFIG_EXACT_ID",
+            "MERCHANT_PAGE_STATE_SHA256"
+          ],
+          "title": "Independent Verification Method",
+          "type": "string"
+        },
+        "independent_verification_reference": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Independent Verification Reference"
+        },
+        "observed_platform_store_id": {
+          "maxLength": 128,
+          "minLength": 1,
+          "title": "Observed Platform Store Id",
+          "type": "string"
+        },
+        "response_field_path": {
+          "anyOf": [
+            {
+              "maxLength": 256,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Field Path"
+        }
+      },
+      "required": [
+        "expected_platform_store_id",
+        "observed_platform_store_id",
+        "evidence_source"
+      ],
+      "title": "IdentityEvidence",
+      "type": "object"
+    },
+    "MetricWindow": {
+      "additionalProperties": false,
+      "properties": {
+        "end": {
+          "format": "date-time",
+          "title": "End",
+          "type": "string"
+        },
+        "kind": {
+          "$ref": "#/$defs/WindowKind"
+        },
+        "source_finalized": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Finalized"
+        },
+        "start": {
+          "format": "date-time",
+          "title": "Start",
+          "type": "string"
+        },
+        "timezone": {
+          "title": "Timezone",
+          "type": "string"
+        },
+        "window_complete": {
+          "title": "Window Complete",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "kind",
+        "timezone",
+        "start",
+        "end",
+        "window_complete"
+      ],
+      "title": "MetricWindow",
+      "type": "object"
+    },
+    "Quality": {
+      "additionalProperties": false,
+      "properties": {
+        "coverage": {
+          "$ref": "#/$defs/CoverageStatus"
+        },
+        "dom_check": {
+          "enum": [
+            "MATCHED",
+            "NOT_RUN",
+            "MISMATCH"
+          ],
+          "title": "Dom Check",
+          "type": "string"
+        },
+        "identity": {
+          "enum": [
+            "MATCHED",
+            "NOT_CHECKED",
+            "MISMATCH"
+          ],
+          "title": "Identity",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "VALID",
+            "INVALID"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "identity",
+        "coverage",
+        "dom_check"
+      ],
+      "title": "Quality",
+      "type": "object"
+    },
+    "Scope": {
+      "additionalProperties": false,
+      "properties": {
+        "attribution": {
+          "default": "PLATFORM_DEFAULT",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "title": "Attribution",
+          "type": "string"
+        },
+        "business_date": {
+          "format": "date",
+          "title": "Business Date",
+          "type": "string"
+        },
+        "currency": {
+          "default": "CNY",
+          "pattern": "^[A-Z]{3}$",
+          "title": "Currency",
+          "type": "string"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End"
+        },
+        "filters": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Filters",
+          "type": "object"
+        },
+        "kind": {
+          "$ref": "#/$defs/WindowKind"
+        },
+        "object_type": {
+          "default": "ACCOUNT_ALL",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "title": "Object Type",
+          "type": "string"
+        },
+        "start": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Start"
+        },
+        "timezone": {
+          "default": "Asia/Shanghai",
+          "title": "Timezone",
+          "type": "string"
+        },
+        "version": {
+          "default": "1",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+/-]{0,63}$",
+          "title": "Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "business_date"
+      ],
+      "title": "Scope",
+      "type": "object"
+    },
+    "WindowKind": {
+      "enum": [
+        "TODAY",
+        "YESTERDAY",
+        "LAST_7_DAYS",
+        "LAST_30_DAYS",
+        "POINT_IN_TIME",
+        "CUSTOM",
+        "UNKNOWN"
+      ],
+      "title": "WindowKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "batch_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Batch Id"
+    },
+    "capture_finished_at": {
+      "format": "date-time",
+      "title": "Capture Finished At",
+      "type": "string"
+    },
+    "capture_method": {
+      "enum": [
+        "SYNTHETIC",
+        "NETWORK_RESPONSE",
+        "DOM",
+        "MIXED"
+      ],
+      "title": "Capture Method",
+      "type": "string"
+    },
+    "capture_started_at": {
+      "format": "date-time",
+      "title": "Capture Started At",
+      "type": "string"
+    },
+    "captured_at": {
+      "format": "date-time",
+      "title": "Captured At",
+      "type": "string"
+    },
+    "committed_at": {
+      "format": "date-time",
+      "title": "Committed At",
+      "type": "string"
+    },
+    "coverage": {
+      "$ref": "#/$defs/Coverage"
+    },
+    "dataset_type": {
+      "$ref": "#/$defs/DatasetType"
+    },
+    "field_sources": {
+      "additionalProperties": {
+        "enum": [
+          "NETWORK_RESPONSE",
+          "DOM"
+        ],
+        "type": "string"
+      },
+      "title": "Field Sources",
+      "type": "object"
+    },
+    "files": {
+      "items": {
+        "$ref": "#/$defs/FileDescriptor"
+      },
+      "title": "Files",
+      "type": "array"
+    },
+    "idempotency_key_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Idempotency Key Hash",
+      "type": "string"
+    },
+    "identity_evidence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IdentityEvidence"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "layout_version": {
+      "title": "Layout Version",
+      "type": "string"
+    },
+    "metric_window": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/MetricWindow"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "missing_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Missing Fields",
+      "type": "array"
+    },
+    "parameter_hash": {
+      "pattern": "^[0-9a-f]{64}$",
+      "title": "Parameter Hash",
+      "type": "string"
+    },
+    "parser_version": {
+      "title": "Parser Version",
+      "type": "string"
+    },
+    "payload_file": {
+      "enum": [
+        "data.json",
+        "records.jsonl"
+      ],
+      "title": "Payload File",
+      "type": "string"
+    },
+    "platform": {
+      "const": "pdd",
+      "default": "pdd",
+      "title": "Platform",
+      "type": "string"
+    },
+    "quality": {
+      "$ref": "#/$defs/Quality"
+    },
+    "record_count": {
+      "minimum": 0,
+      "title": "Record Count",
+      "type": "integer"
+    },
+    "request_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+      "title": "Request Id",
+      "type": "string"
+    },
+    "requested_at": {
+      "format": "date-time",
+      "title": "Requested At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1.0.0",
+      "default": "1.0.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scope": {
+      "$ref": "#/$defs/Scope"
+    },
+    "scope_key": {
+      "pattern": "^scope_[0-9a-f]{32}$",
+      "title": "Scope Key",
+      "type": "string"
+    },
+    "snapshot_id": {
+      "pattern": "^s_[0-9a-f]{32}$",
+      "title": "Snapshot Id",
+      "type": "string"
+    },
+    "source": {
+      "enum": [
+        "SYNTHETIC",
+        "PDD_BROWSER_CDP"
+      ],
+      "title": "Source",
+      "type": "string"
+    },
+    "source_updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Updated At"
+    },
+    "store_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+      "title": "Store Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "snapshot_id",
+    "request_id",
+    "idempotency_key_hash",
+    "parameter_hash",
+    "layout_version",
+    "store_id",
+    "dataset_type",
+    "scope",
+    "scope_key",
+    "requested_at",
+    "capture_started_at",
+    "capture_finished_at",
+    "captured_at",
+    "committed_at",
+    "source",
+    "capture_method",
+    "parser_version",
+    "missing_fields",
+    "quality",
+    "coverage",
+    "payload_file",
+    "files",
+    "record_count"
+  ],
+  "title": "SnapshotManifest",
+  "type": "object"
+}

@@ -1,0 +1,70 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "granularity": {
+      "enum": [
+        "PRODUCT",
+        "SKU"
+      ],
+      "title": "Granularity",
+      "type": "string"
+    },
+    "inventory": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Inventory"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "platform_product_id": {
+      "anyOf": [
+        {
+          "maxLength": 128,
+          "minLength": 1,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Platform Product Id"
+    },
+    "product_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+      "title": "Product Id",
+      "type": "string"
+    },
+    "sku_id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Sku Id"
+    }
+  },
+  "required": [
+    "product_id",
+    "granularity",
+    "observed_at"
+  ],
+  "title": "InventoryRecord",
+  "type": "object"
+}
