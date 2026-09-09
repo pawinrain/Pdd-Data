@@ -76,12 +76,31 @@ async def exercise(config: Path) -> None:
             )
         )
         assert listed["items"][0]["snapshot_id"] == snapshot_id
+        assert "effective_status" not in listed["items"][0]
+        assert "invalidation" not in listed["items"][0]
         read = content(
             await client.call_tool(
                 "pdd_read_snapshot", {"snapshot_id": snapshot_id, "page_size": 25}
             )
         )
         assert len(read["records"]) == 25
+        assert "effective_status" not in read
+        assert "invalidation" not in read
+        assert "promotion_account_time_evidence" not in read["manifest"]
+        assert read["manifest"]["schema_version"] == "1.0.0"
+        latest = content(
+            await client.call_tool(
+                "pdd_get_latest_snapshot",
+                {
+                    "store_id": "st_test_001",
+                    "dataset_type": "product_catalog",
+                    "scope": scope,
+                },
+            )
+        )
+        assert latest["snapshot"]["snapshot_id"] == snapshot_id
+        assert "effective_status" not in latest["snapshot"]
+        assert "invalidation" not in latest["snapshot"]
     async with Client(params(config), raise_exceptions=True) as restarted:
         reread = content(
             await restarted.call_tool(

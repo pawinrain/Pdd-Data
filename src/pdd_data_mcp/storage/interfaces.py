@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pdd_data_mcp.contracts.models import (
     DatasetType,
@@ -10,6 +10,7 @@ from pdd_data_mcp.contracts.models import (
     ReadSnapshotResult,
     Scope,
     SnapshotDraft,
+    SnapshotInvalidationRecord,
     SnapshotManifest,
     ValidationReport,
 )
@@ -37,6 +38,18 @@ class SnapshotRepository(Protocol):
     def fail_request(self, reservation: RequestReservation, error_code: str) -> None: ...
 
     def get_manifest(self, snapshot_id: str) -> SnapshotManifest: ...
+
+    def get_snapshot_effective_status(
+        self, snapshot_id: str
+    ) -> Literal["ACTIVE", "SEMANTICALLY_INVALIDATED", "INVALIDATION_STATE_UNKNOWN"]: ...
+
+    def invalidate_snapshot(
+        self,
+        *,
+        snapshot_id: str,
+        reason_code: str,
+        replacement_scope_version: str,
+    ) -> SnapshotInvalidationRecord: ...
 
     def list_snapshots(
         self,

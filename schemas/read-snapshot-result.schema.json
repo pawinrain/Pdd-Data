@@ -1,4 +1,83 @@
 {
+  "$defs": {
+    "DatasetType": {
+      "enum": [
+        "store_overview",
+        "product_catalog",
+        "inventory",
+        "promotion_overview",
+        "product_metrics",
+        "product_business_metrics",
+        "campaign_metrics",
+        "promotion_configuration",
+        "activity_catalog"
+      ],
+      "title": "DatasetType",
+      "type": "string"
+    },
+    "SnapshotInvalidationRecord": {
+      "additionalProperties": false,
+      "description": "Append-only semantic invalidation stored outside an immutable snapshot.",
+      "properties": {
+        "dataset_type": {
+          "$ref": "#/$defs/DatasetType"
+        },
+        "invalidated_at": {
+          "format": "date-time",
+          "title": "Invalidated At",
+          "type": "string"
+        },
+        "invalidation_id": {
+          "pattern": "^i_[0-9a-f]{32}$",
+          "title": "Invalidation Id",
+          "type": "string"
+        },
+        "prior_parser_version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+/-]{0,63}$",
+          "title": "Prior Parser Version",
+          "type": "string"
+        },
+        "prior_scope_version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+/-]{0,63}$",
+          "title": "Prior Scope Version",
+          "type": "string"
+        },
+        "reason_code": {
+          "const": "METRIC_WINDOW_END_MISLABELED",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "replacement_scope_version": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_.+/-]{0,63}$",
+          "title": "Replacement Scope Version",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "pattern": "^s_[0-9a-f]{32}$",
+          "title": "Snapshot Id",
+          "type": "string"
+        },
+        "store_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$",
+          "title": "Store Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "invalidation_id",
+        "snapshot_id",
+        "store_id",
+        "dataset_type",
+        "invalidated_at",
+        "reason_code",
+        "prior_scope_version",
+        "prior_parser_version",
+        "replacement_scope_version"
+      ],
+      "title": "SnapshotInvalidationRecord",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "data": {
@@ -13,6 +92,27 @@
       ],
       "default": null,
       "title": "Data"
+    },
+    "effective_status": {
+      "default": "ACTIVE",
+      "enum": [
+        "ACTIVE",
+        "SEMANTICALLY_INVALIDATED",
+        "INVALIDATION_STATE_UNKNOWN"
+      ],
+      "title": "Effective Status",
+      "type": "string"
+    },
+    "invalidation": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/SnapshotInvalidationRecord"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "manifest": {
       "additionalProperties": true,

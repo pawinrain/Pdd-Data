@@ -41,7 +41,8 @@ class CdpConnector:
         return CdpSession(playwright=manager, browser=browser)
 
 
-def _same_page(candidate: str, target: str) -> bool:
+def same_page_url(candidate: str, target: str) -> bool:
+    """Match one configured page while deliberately ignoring query and fragment data."""
     actual = urlsplit(candidate)
     expected = urlsplit(target)
     return (
@@ -64,7 +65,7 @@ async def select_target_page(
     pages: list[Page] = [
         page for context in browser.contexts for page in context.pages if not page.is_closed()
     ]
-    matching = [page for page in pages if _same_page(page.url, connection.target_page_url)]
+    matching = [page for page in pages if same_page_url(page.url, connection.target_page_url)]
     if not matching:
         raise CollectionRejected("TARGET_PAGE_NOT_FOUND", "PROMOTION_OVERVIEW_PAGE_NOT_FOUND")
     if len(matching) != 1:
@@ -91,7 +92,7 @@ async def select_page_by_url(
     pages: list[Page] = [
         page for context in browser.contexts for page in context.pages if not page.is_closed()
     ]
-    matching = [page for page in pages if _same_page(page.url, target_page_url)]
+    matching = [page for page in pages if same_page_url(page.url, target_page_url)]
     if not matching:
         raise CollectionRejected("TARGET_PAGE_NOT_FOUND", f"{page_code}_NOT_FOUND")
     if len(matching) != 1:

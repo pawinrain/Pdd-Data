@@ -80,7 +80,9 @@
         "inventory",
         "promotion_overview",
         "product_metrics",
+        "product_business_metrics",
         "campaign_metrics",
+        "promotion_configuration",
         "activity_catalog"
       ],
       "title": "DatasetType",
@@ -265,6 +267,132 @@
       "title": "MetricWindow",
       "type": "object"
     },
+    "PromotionAccountTimeEvidence": {
+      "additionalProperties": false,
+      "description": "Sanitized, non-entity evidence for one account comparison window.\n\nThe source request and DOM text are validated before this model is built.  Only\nnormalized dates, cutoff clocks, and fixed provenance labels are persisted; no\nrequest identity, headers, response body, or metric values are included.",
+      "properties": {
+        "business_timezone": {
+          "const": "Asia/Shanghai",
+          "default": "Asia/Shanghai",
+          "title": "Business Timezone",
+          "type": "string"
+        },
+        "page_semantics": {
+          "const": "SAME_PERIOD_COMPARISON",
+          "default": "SAME_PERIOD_COMPARISON",
+          "title": "Page Semantics",
+          "type": "string"
+        },
+        "page_source": {
+          "const": "DOM",
+          "default": "DOM",
+          "title": "Page Source",
+          "type": "string"
+        },
+        "page_today_cutoff_hhmm": {
+          "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "Page Today Cutoff Hhmm",
+          "type": "string"
+        },
+        "page_yesterday_cutoff_hhmm": {
+          "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d$",
+          "title": "Page Yesterday Cutoff Hhmm",
+          "type": "string"
+        },
+        "request_end_date": {
+          "description": "Normalized request endDate after exact midnight-format validation.",
+          "format": "date",
+          "title": "Request End Date",
+          "type": "string"
+        },
+        "request_end_day_hour": {
+          "maximum": 23,
+          "minimum": 0,
+          "title": "Request End Day Hour",
+          "type": "integer"
+        },
+        "request_source": {
+          "const": "NETWORK_RESPONSE",
+          "default": "NETWORK_RESPONSE",
+          "title": "Request Source",
+          "type": "string"
+        },
+        "request_start_date": {
+          "description": "Normalized request startDate after exact midnight-format validation.",
+          "format": "date",
+          "title": "Request Start Date",
+          "type": "string"
+        },
+        "response_business_date": {
+          "description": "Normalized date from the single response dailyReportList row.",
+          "format": "date",
+          "title": "Response Business Date",
+          "type": "string"
+        },
+        "response_first_hour": {
+          "anyOf": [
+            {
+              "maximum": 23,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response First Hour"
+        },
+        "response_hourly_row_count": {
+          "anyOf": [
+            {
+              "maximum": 24,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Hourly Row Count"
+        },
+        "response_last_hour": {
+          "anyOf": [
+            {
+              "maximum": 23,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Response Last Hour"
+        },
+        "response_source": {
+          "const": "NETWORK_RESPONSE",
+          "default": "NETWORK_RESPONSE",
+          "title": "Response Source",
+          "type": "string"
+        },
+        "window_kind": {
+          "$ref": "#/$defs/WindowKind"
+        }
+      },
+      "required": [
+        "window_kind",
+        "request_start_date",
+        "request_end_date",
+        "request_end_day_hour",
+        "response_business_date",
+        "page_today_cutoff_hhmm",
+        "page_yesterday_cutoff_hhmm"
+      ],
+      "title": "PromotionAccountTimeEvidence",
+      "type": "object"
+    },
     "Quality": {
       "additionalProperties": false,
       "properties": {
@@ -394,6 +522,7 @@
         "YESTERDAY",
         "LAST_7_DAYS",
         "LAST_30_DAYS",
+        "LAST_90_DAYS",
         "POINT_IN_TIME",
         "CUSTOM",
         "UNKNOWN"
@@ -532,6 +661,17 @@
       "title": "Platform",
       "type": "string"
     },
+    "promotion_account_time_evidence": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PromotionAccountTimeEvidence"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "quality": {
       "$ref": "#/$defs/Quality"
     },
@@ -551,8 +691,11 @@
       "type": "string"
     },
     "schema_version": {
-      "const": "1.0.0",
       "default": "1.0.0",
+      "enum": [
+        "1.0.0",
+        "1.1.0"
+      ],
       "title": "Schema Version",
       "type": "string"
     },

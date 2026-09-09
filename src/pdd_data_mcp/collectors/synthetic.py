@@ -175,8 +175,16 @@ class SyntheticCollector:
             start = local_midnight
             end = local_midnight + timedelta(days=1)
             complete = True
-        elif scope.kind in {WindowKind.LAST_7_DAYS, WindowKind.LAST_30_DAYS}:
-            days = 7 if scope.kind is WindowKind.LAST_7_DAYS else 30
+        elif scope.kind in {
+            WindowKind.LAST_7_DAYS,
+            WindowKind.LAST_30_DAYS,
+            WindowKind.LAST_90_DAYS,
+        }:
+            days = {
+                WindowKind.LAST_7_DAYS: 7,
+                WindowKind.LAST_30_DAYS: 30,
+                WindowKind.LAST_90_DAYS: 90,
+            }[scope.kind]
             end = local_midnight + timedelta(days=1)
             start = end - timedelta(days=days)
             complete = True

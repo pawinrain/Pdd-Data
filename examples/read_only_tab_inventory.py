@@ -45,7 +45,6 @@ async def main() -> None:
             )
         )
     finally:
-        await browser.close()
         await manager.stop()
 
 

@@ -9,12 +9,15 @@ from urllib.parse import urlsplit
 
 from playwright.async_api import Response, async_playwright
 
+from pdd_data_mcp.browser.cdp import same_page_url
 from pdd_data_mcp.browser.promotion import sanitized_json_shape
 
 _SAFE_DISCRIMINATOR = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,80}$")
 
 
-async def probe(target_url: str, paths: set[str], observe_seconds: float) -> None:
+async def probe(
+    target_url: str, response_host: str, paths: set[str], observe_seconds: float
+) -> None:
     manager = await async_playwright().start()
     browser = await manager.chromium.connect_over_cdp("http://127.0.0.1:9222")
     results: dict[str, list[dict[str, object]]] = {}
@@ -24,7 +27,7 @@ async def probe(target_url: str, paths: set[str], observe_seconds: float) -> Non
         parsed = urlsplit(response.url)
         content_type = response.headers.get("content-type", "").partition(";")[0].casefold()
         if (
-            parsed.hostname != "mms.pinduoduo.com"
+            parsed.hostname != response_host
             or parsed.path not in paths
             or response.request.method not in {"GET", "POST"}
             or response.status != 200
@@ -64,11 +67,7 @@ async def probe(target_url: str, paths: set[str], observe_seconds: float) -> Non
     try:
         pages = [page for context in browser.contexts for page in context.pages]
         page = next(
-            (
-                candidate
-                for candidate in pages
-                if candidate.url.rstrip("/") == target_url.rstrip("/")
-            ),
+            (candidate for candidate in pages if same_page_url(candidate.url, target_url)),
             None,
         )
         if page is None:
@@ -91,7 +90,6 @@ async def probe(target_url: str, paths: set[str], observe_seconds: float) -> Non
             )
         )
     finally:
-        await browser.close()
         await manager.stop()
 
 
@@ -99,9 +97,14 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("target_url")
     parser.add_argument("paths", nargs="+")
+    parser.add_argument("--response-host", default="")
     parser.add_argument("--observe-seconds", type=float, default=8.0)
     args = parser.parse_args()
-    asyncio.run(probe(args.target_url, set(args.paths), args.observe_seconds))
+    target_host = urlsplit(args.target_url).hostname
+    response_host = args.response_host or target_host
+    if response_host not in {"mms.pinduoduo.com", "yingxiao.pinduoduo.com"}:
+        parser.error("response host must be an exact approved Pinduoduo host")
+    asyncio.run(probe(args.target_url, response_host, set(args.paths), args.observe_seconds))
 
 
 if __name__ == "__main__":

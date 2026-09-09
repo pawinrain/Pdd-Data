@@ -2,7 +2,7 @@
 
 - 验收日期：2026-09-06
 - 验收环境：Windows 10 `10.0.19045` / Asia/Shanghai
-- 项目位置：`C:\Users\jingzu\Documents\ChatGPT\通往山巅的路\pdd-data-mcp`
+- 项目位置：`C:\path\to\pdd-data-mcp`（验收时使用独立本地工作目录）
 - 阶段 A：**PASS**
 - 阶段 B：**PASS**
 - 阶段 C：**NOT_RUN**

@@ -14,11 +14,14 @@ from pdd_data_mcp.contracts.models import (
     CollectResult,
     ConnectionStatusResult,
     CoverageStatus,
+    DatasetCapabilityDetail,
+    DatasetCapabilityStatus,
     DatasetType,
     LatestSnapshotResult,
     ListSnapshotsResult,
     ReadSnapshotResult,
     Scope,
+    WindowKind,
 )
 from pdd_data_mcp.errors import AuthorizationError, CollectionRejected, ValidationFailure
 from pdd_data_mcp.storage import SnapshotRepository
@@ -55,16 +58,44 @@ class PddDataService:
         ]
         real_available = any(
             item.promotion_adapter.verified
+            or item.promotion_account_adapter.verified
+            or item.promotion_metrics_adapter.verified
             or item.store_overview_adapter.verified
             or item.product_catalog_adapter.verified
             or item.inventory_adapter.verified
             for item in real_connections
         )
         real_configured = bool(real_connections)
-        datasets: dict[str, str] = {}
+        datasets: dict[str, DatasetCapabilityStatus] = {}
+        details: dict[str, DatasetCapabilityDetail] = {}
+        promoted_product_windows = [
+            window
+            for window in WindowKind
+            if any(
+                item.promotion_metrics_adapter.verified
+                and window.value in item.promotion_metrics_adapter.supported_windows
+                for item in real_connections
+            )
+        ]
+        promotion_account_windows = [
+            window
+            for window in (WindowKind.TODAY, WindowKind.YESTERDAY)
+            if any(
+                item.promotion_account_adapter.verified
+                and window.value in item.promotion_account_adapter.supported_windows
+                for item in real_connections
+            )
+        ]
         for dataset in DatasetType:
             dataset_available = any(
-                (dataset is DatasetType.PROMOTION_OVERVIEW and item.promotion_adapter.verified)
+                (
+                    dataset is DatasetType.PROMOTION_OVERVIEW
+                    and (item.promotion_account_adapter.verified or item.promotion_adapter.verified)
+                )
+                or (
+                    dataset in {DatasetType.PRODUCT_METRICS, DatasetType.PROMOTION_CONFIGURATION}
+                    and item.promotion_metrics_adapter.verified
+                )
                 or (dataset is DatasetType.STORE_OVERVIEW and item.store_overview_adapter.verified)
                 or (
                     dataset is DatasetType.PRODUCT_CATALOG and item.product_catalog_adapter.verified
@@ -73,7 +104,15 @@ class PddDataService:
                 for item in real_connections
             )
             if dataset is DatasetType.PROMOTION_OVERVIEW and dataset_available:
-                datasets[dataset.value] = "REAL_PROMOTION_TODAY"
+                datasets[dataset.value] = (
+                    "REAL_PROMOTION_WINDOWS"
+                    if promotion_account_windows
+                    else "REAL_PROMOTION_TODAY"
+                )
+            elif dataset is DatasetType.PRODUCT_METRICS and dataset_available:
+                datasets[dataset.value] = "REAL_PROMOTED_PRODUCT_METRICS"
+            elif dataset is DatasetType.PROMOTION_CONFIGURATION and dataset_available:
+                datasets[dataset.value] = "REAL_PROMOTION_CONFIGURATION_CURRENT"
             elif dataset is DatasetType.STORE_OVERVIEW and dataset_available:
                 datasets[dataset.value] = "REAL_STORE_TODAY"
             elif dataset is DatasetType.PRODUCT_CATALOG and dataset_available:
@@ -84,6 +123,8 @@ class PddDataService:
                 dataset
                 in {
                     DatasetType.PROMOTION_OVERVIEW,
+                    DatasetType.PRODUCT_METRICS,
+                    DatasetType.PROMOTION_CONFIGURATION,
                     DatasetType.STORE_OVERVIEW,
                     DatasetType.PRODUCT_CATALOG,
                     DatasetType.INVENTORY,
@@ -95,6 +136,63 @@ class PddDataService:
                 datasets[dataset.value] = "SYNTHETIC_TEST_ONLY"
             else:
                 datasets[dataset.value] = "UNAVAILABLE"
+            granularity = {
+                DatasetType.STORE_OVERVIEW: "STORE",
+                DatasetType.PROMOTION_OVERVIEW: "ACCOUNT",
+                DatasetType.CAMPAIGN_METRICS: "CAMPAIGN",
+                DatasetType.PRODUCT_METRICS: "PROMOTED_PRODUCT",
+                DatasetType.PRODUCT_BUSINESS_METRICS: "PRODUCT",
+                DatasetType.PROMOTION_CONFIGURATION: "PROMOTED_PRODUCT",
+                DatasetType.PRODUCT_CATALOG: "PRODUCT",
+                DatasetType.INVENTORY: "PRODUCT",
+                DatasetType.ACTIVITY_CATALOG: "UNKNOWN",
+            }[dataset]
+            supported_windows: list[WindowKind] = []
+            current_only = False
+            limitation: str | None = None
+            if dataset is DatasetType.PRODUCT_METRICS:
+                supported_windows = promoted_product_windows
+            elif dataset is DatasetType.PROMOTION_OVERVIEW:
+                supported_windows = (
+                    promotion_account_windows
+                    if promotion_account_windows
+                    else [WindowKind.TODAY]
+                    if dataset_available
+                    else []
+                )
+                if promotion_account_windows:
+                    limitation = (
+                        "D4 account windows require scope.version=d4-account-v3; "
+                        "legacy Stage C remains version=1 and TODAY-only."
+                    )
+            elif dataset is DatasetType.PROMOTION_CONFIGURATION:
+                supported_windows = [WindowKind.POINT_IN_TIME] if dataset_available else []
+                current_only = True
+                limitation = "Current observation only; never represented as historical settings."
+            elif dataset is DatasetType.STORE_OVERVIEW:
+                supported_windows = [WindowKind.TODAY] if dataset_available else []
+            elif dataset in {DatasetType.PRODUCT_CATALOG, DatasetType.INVENTORY}:
+                supported_windows = [WindowKind.POINT_IN_TIME] if dataset_available else []
+                current_only = True
+            elif dataset is DatasetType.CAMPAIGN_METRICS:
+                limitation = (
+                    "A planId association exists, but no campaign-grain metric source is verified."
+                )
+            elif dataset is DatasetType.PRODUCT_BUSINESS_METRICS:
+                limitation = (
+                    "Contract/parser only; collection remains unavailable. The initial design is "
+                    "PRODUCT-grain full YESTERDAY daily aggregates. Metric string formats, units, "
+                    "pagination semantics, source classification, and independent identity are "
+                    "not yet verified; 7-day and interval summaries are unavailable."
+                )
+            details[dataset.value] = DatasetCapabilityDetail(
+                status=datasets[dataset.value],
+                supported_window_kinds=supported_windows,
+                entity_granularity=granularity,  # type: ignore[arg-type]
+                current_only=current_only,
+                verified=dataset_available,
+                limitation=limitation,
+            )
         return CapabilitiesResult(
             version=__version__,
             synthetic_test_mode=synthetic_enabled,
@@ -105,7 +203,8 @@ class PddDataService:
                 if real_configured
                 else "DISABLED"
             ),
-            datasets=datasets,  # type: ignore[arg-type]
+            datasets=datasets,
+            dataset_details=details,
         )
 
     def connection_status(self, connection_id: str) -> ConnectionStatusResult:
@@ -152,7 +251,48 @@ class PddDataService:
                 )
             collector = self.synthetic_collector
         elif connection.real_collection_enabled:
-            if dataset_type is DatasetType.PROMOTION_OVERVIEW and scope.kind.value != "TODAY":
+            if dataset_type is DatasetType.PRODUCT_BUSINESS_METRICS:
+                return CollectResult(
+                    status="DATASET_UNVERIFIED",
+                    committed=False,
+                    dataset_type=dataset_type,
+                    error_code="PRODUCT_BUSINESS_COLLECTION_NOT_ADAPTED",
+                )
+            if dataset_type is DatasetType.PROMOTION_OVERVIEW:
+                account_adapter = connection.promotion_account_adapter
+                account_v3_allowed = (
+                    scope.version == "d4-account-v3"
+                    and account_adapter.verified
+                    and scope.kind.value in account_adapter.supported_windows
+                )
+                stage_c_allowed = (
+                    scope.version == "1"
+                    and connection.promotion_adapter.verified
+                    and scope.kind is WindowKind.TODAY
+                )
+                if not account_v3_allowed and not stage_c_allowed:
+                    return CollectResult(
+                        status="DATASET_UNVERIFIED",
+                        committed=False,
+                        dataset_type=dataset_type,
+                        error_code="REAL_DATASET_OR_SCOPE_NOT_ADAPTED",
+                    )
+            elif dataset_type is DatasetType.PRODUCT_METRICS:
+                promotion_metrics = connection.promotion_metrics_adapter
+                if (
+                    not promotion_metrics.verified
+                    or scope.kind.value not in promotion_metrics.supported_windows
+                ):
+                    return CollectResult(
+                        status="DATASET_UNVERIFIED",
+                        committed=False,
+                        dataset_type=dataset_type,
+                        error_code="REAL_DATASET_OR_SCOPE_NOT_ADAPTED",
+                    )
+            elif (
+                dataset_type is DatasetType.PROMOTION_CONFIGURATION
+                and scope.kind is not WindowKind.POINT_IN_TIME
+            ):
                 return CollectResult(
                     status="DATASET_UNVERIFIED",
                     committed=False,
@@ -201,6 +341,22 @@ class PddDataService:
                 scope_key=key,
             )
             if reservation.state == "COMMITTED":
+                effective_status = self.repository.get_snapshot_effective_status(
+                    reservation.snapshot_id
+                )
+                if effective_status != "ACTIVE":
+                    return CollectResult(
+                        status="DATA_MISMATCH",
+                        committed=False,
+                        snapshot_id=None,
+                        dataset_type=dataset_type,
+                        idempotent_replay=True,
+                        error_code=(
+                            "IDEMPOTENT_SNAPSHOT_SEMANTICALLY_INVALIDATED"
+                            if effective_status == "SEMANTICALLY_INVALIDATED"
+                            else "IDEMPOTENT_SNAPSHOT_INVALIDATION_STATE_UNKNOWN"
+                        ),
+                    )
                 manifest = self.repository.get_manifest(reservation.snapshot_id)
                 return self._collect_result(manifest, idempotent_replay=True)
             if reservation.state == "RUNNING":

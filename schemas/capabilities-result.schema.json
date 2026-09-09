@@ -1,11 +1,107 @@
 {
+  "$defs": {
+    "DatasetCapabilityDetail": {
+      "additionalProperties": false,
+      "properties": {
+        "current_only": {
+          "default": false,
+          "title": "Current Only",
+          "type": "boolean"
+        },
+        "entity_granularity": {
+          "enum": [
+            "STORE",
+            "ACCOUNT",
+            "CAMPAIGN",
+            "PROMOTED_PRODUCT",
+            "PRODUCT",
+            "SKU",
+            "UNKNOWN"
+          ],
+          "title": "Entity Granularity",
+          "type": "string"
+        },
+        "limitation": {
+          "anyOf": [
+            {
+              "maxLength": 512,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Limitation"
+        },
+        "status": {
+          "enum": [
+            "SYNTHETIC_TEST_ONLY",
+            "REAL_PROMOTION_TODAY",
+            "REAL_PROMOTION_WINDOWS",
+            "REAL_PROMOTED_PRODUCT_METRICS",
+            "REAL_PROMOTION_CONFIGURATION_CURRENT",
+            "REAL_STORE_TODAY",
+            "REAL_PRODUCT_CATALOG",
+            "REAL_INVENTORY",
+            "CONFIGURED_NOT_VERIFIED",
+            "UNAVAILABLE"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "supported_window_kinds": {
+          "items": {
+            "$ref": "#/$defs/WindowKind"
+          },
+          "title": "Supported Window Kinds",
+          "type": "array"
+        },
+        "verified": {
+          "default": false,
+          "title": "Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "status",
+        "entity_granularity"
+      ],
+      "title": "DatasetCapabilityDetail",
+      "type": "object"
+    },
+    "WindowKind": {
+      "enum": [
+        "TODAY",
+        "YESTERDAY",
+        "LAST_7_DAYS",
+        "LAST_30_DAYS",
+        "LAST_90_DAYS",
+        "POINT_IN_TIME",
+        "CUSTOM",
+        "UNKNOWN"
+      ],
+      "title": "WindowKind",
+      "type": "string"
+    }
+  },
   "additionalProperties": false,
   "properties": {
+    "dataset_details": {
+      "additionalProperties": {
+        "$ref": "#/$defs/DatasetCapabilityDetail"
+      },
+      "title": "Dataset Details",
+      "type": "object"
+    },
     "datasets": {
       "additionalProperties": {
         "enum": [
           "SYNTHETIC_TEST_ONLY",
           "REAL_PROMOTION_TODAY",
+          "REAL_PROMOTION_WINDOWS",
+          "REAL_PROMOTED_PRODUCT_METRICS",
+          "REAL_PROMOTION_CONFIGURATION_CURRENT",
           "REAL_STORE_TODAY",
           "REAL_PRODUCT_CATALOG",
           "REAL_INVENTORY",

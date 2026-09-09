@@ -36,6 +36,109 @@ target_page_url = "https://yingxiao.pinduoduo.com/mains/promotionOverview"
 real_collection_enabled = false
 synthetic_enabled = false
 
+[connections.promotion_account_adapter]
+verified = false
+data_source = "NETWORK_RESPONSE"
+request_contract_version = "PROMOTION_ACCOUNT_HOURLY_DUAL_V1"
+target_page_url = "https://yingxiao.pinduoduo.com/mains/promotionOverview"
+response_host = "yingxiao.pinduoduo.com"
+response_path = "/mms-gateway/poseidon/api/report/queryHourlyRangeReport"
+response_method = "POST"
+response_http_status = 200
+response_content_type = "application/json"
+business_success_path = "success"
+business_success_value = true
+identity_source = "IDENTITY_RESPONSE"
+identity_response_host = "yingxiao.pinduoduo.com"
+identity_response_path = "/mms-gateway/venus/api/user/info"
+identity_response_method = "POST"
+identity_response_http_status = 200
+identity_business_success_path = "success"
+identity_business_success_value = true
+identity_platform_store_id_path = "result.mallId"
+identity_verification_reference = "promotion-account-request-and-user-info-v2"
+parser_version = "d4-account-v3"
+trigger = "RELOAD"
+login_selector = 'input[type="password"]'
+captcha_selector = 'input[placeholder*="验证码"], iframe[src*="captcha"], [class*="Captcha"], [class*="captcha"]'
+error_selector = ""
+supported_windows = ["TODAY", "YESTERDAY"]
+daily_report_list_path = "result.dailyReportList"
+summary_path = "result.sumReport"
+daily_business_date_path = "date"
+request_date_format = "PDD_MIDNIGHT_SECONDS"
+response_date_format = "PDD_MIDNIGHT_SECONDS"
+result_source_updated_at_path = "result.reportLastUpdateTime"
+secondary_source_updated_at_path = "result.lastUpdateTime"
+request_entity_id_field = "entityId"
+request_start_date_field = "startDate"
+request_end_date_field = "endDate"
+request_query_dimension_type_field = "queryDimensionType"
+request_report_promotion_type_field = "reportPromotionType"
+request_client_type_field = "clientType"
+request_end_day_hour_field = "endDayHour"
+request_return_last_update_time_field = "returnLastUpdateTime"
+request_block_types_field = "blockTypes"
+request_crawler_info_field = "crawlerInfo"
+request_crawler_info_max_length = 4096
+request_end_day_hour_semantics = "INCLUSIVE_HOURLY_ROW_INDEX_WITH_DOM_CUTOFF"
+# The selectors are evidenced, but this public template remains disabled by default.
+dom_today_spend_selector = "xpath=//div[contains(@class,'ChartBlockArea_indicator__')][.//span[normalize-space(.)='总花费(元)']]//div[contains(@class,'ChartBlockArea_val__')]/span"
+dom_yesterday_spend_selector = "xpath=//div[contains(@class,'ChartBlockArea_indicator__')][.//span[normalize-space(.)='总花费(元)']]//div[contains(@class,'ChartBlockArea_pre__')]"
+dom_report_date_explanation_selector = "div[class*='ReportDateExplain_content__']"
+dom_spend_unit = "CNY"
+
+[connections.promotion_metrics_adapter]
+verified = false
+data_source = "NETWORK_RESPONSE"
+request_contract_version = "PROMOTED_PRODUCT_LIST_UNFILTERED_V1"
+request_crawler_info_max_length = 4096
+target_page_url = "https://yingxiao.pinduoduo.com/goods/promotion/list"
+response_host = "yingxiao.pinduoduo.com"
+response_path = "/mms-gateway/venus/api/goods/promotion/v3/list"
+response_method = "POST"
+response_http_status = 200
+business_success_path = "success"
+business_success_value = true
+identity_source = "IDENTITY_RESPONSE"
+identity_response_host = "yingxiao.pinduoduo.com"
+identity_response_path = "/mms-gateway/venus/api/user/userInfo"
+identity_response_method = "POST"
+identity_response_http_status = 200
+identity_business_success_path = "success"
+identity_business_success_value = true
+identity_platform_store_id_path = "result.mall.mallId"
+identity_verification_reference = "merchant-basic-response-page-and-promoted-product-row-v1"
+parser_version = "pdd-promoted-product-v3/1.0.0"
+trigger = "RELOAD"
+login_selector = 'input[type="password"]'
+captcha_selector = 'input[placeholder*="验证码"], iframe[src*="captcha"], [class*="Captcha"], [class*="captcha"]'
+error_selector = ""
+supported_windows = ["TODAY"]
+quick_option_testids = { TODAY = "DateAreaQuickOption_0" }
+list_path = "result.adInfos"
+summary_path = "result.sumReportInfo"
+source_updated_at_path = "result.reportLastUpdateTime"
+row_platform_store_id_path = "mallId"
+promotion_id_path = "adId"
+campaign_id_path = "planId"
+platform_product_id_path = "goodsId"
+product_name_path = "goodsInfo.goodsName"
+report_path = "reportInfo"
+max_cost_path = "maxCost"
+target_roi_path = "targetRoi"
+agent_bid_path = "agentBid"
+ad_status_path = "adStatus"
+request_begin_date_field = "beginDate"
+request_end_date_field = "endDate"
+request_page_number_field = "pageNumber"
+request_page_size_field = "pageSize"
+platform_page_size = 50
+pagination_terminal_rule = "SHORT_PAGE"
+dom_row_selector = "tbody tr"
+reload_resets_to_today = true
+configuration_current_only = true
+
 [connections.store_overview_adapter]
 verified = false
 data_source = "NETWORK_RESPONSE"

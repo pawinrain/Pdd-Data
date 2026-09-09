@@ -6,6 +6,7 @@
         "YESTERDAY",
         "LAST_7_DAYS",
         "LAST_30_DAYS",
+        "LAST_90_DAYS",
         "POINT_IN_TIME",
         "CUSTOM",
         "UNKNOWN"

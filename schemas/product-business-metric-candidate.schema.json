@@ -1,0 +1,166 @@
+{
+  "$defs": {
+    "ProductBusinessMetricCandidate": {
+      "additionalProperties": false,
+      "description": "A source string whose numeric format and unit are not yet verified.\n\nKeeping the exact source string and both verification flags prevents a field\nname from being mistaken for a confirmed count or money unit.  This model is\nparser output only until those semantics are accepted by the snapshot layer.",
+      "properties": {
+        "missing_reason": {
+          "anyOf": [
+            {
+              "enum": [
+                "SOURCE_FIELD_MISSING",
+                "SOURCE_VALUE_NULL"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Missing Reason"
+        },
+        "numeric_format_verified": {
+          "const": false,
+          "default": false,
+          "title": "Numeric Format Verified",
+          "type": "boolean"
+        },
+        "source_field": {
+          "enum": [
+            "payOrdrUsrCnt",
+            "payOrdrCnt",
+            "payOrdrGoodsQty",
+            "payOrdrAmt",
+            "goodsUv",
+            "goodsPv"
+          ],
+          "title": "Source Field",
+          "type": "string"
+        },
+        "source_value": {
+          "anyOf": [
+            {
+              "maxLength": 128,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Value"
+        },
+        "source_value_type": {
+          "const": "STRING",
+          "default": "STRING",
+          "title": "Source Value Type",
+          "type": "string"
+        },
+        "unit_semantics_verified": {
+          "const": false,
+          "default": false,
+          "title": "Unit Semantics Verified",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source_field"
+      ],
+      "title": "ProductBusinessMetricCandidate",
+      "type": "object"
+    },
+    "ProductBusinessMetricCandidates": {
+      "additionalProperties": false,
+      "properties": {
+        "goods_page_view_count": {
+          "$ref": "#/$defs/ProductBusinessMetricCandidate"
+        },
+        "goods_visitor_count": {
+          "$ref": "#/$defs/ProductBusinessMetricCandidate"
+        },
+        "paid_amount": {
+          "$ref": "#/$defs/ProductBusinessMetricCandidate"
+        },
+        "paid_goods_quantity": {
+          "$ref": "#/$defs/ProductBusinessMetricCandidate"
+        },
+        "paid_order_count": {
+          "$ref": "#/$defs/ProductBusinessMetricCandidate"
+        },
+        "paying_buyer_count": {
+          "$ref": "#/$defs/ProductBusinessMetricCandidate"
+        }
+      },
+      "required": [
+        "paying_buyer_count",
+        "paid_order_count",
+        "paid_goods_quantity",
+        "paid_amount",
+        "goods_visitor_count",
+        "goods_page_view_count"
+      ],
+      "title": "ProductBusinessMetricCandidates",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Candidate-only product/day row with unverified metric-string semantics.",
+  "properties": {
+    "business_date": {
+      "format": "date",
+      "title": "Business Date",
+      "type": "string"
+    },
+    "entity_granularity": {
+      "const": "PRODUCT",
+      "default": "PRODUCT",
+      "title": "Entity Granularity",
+      "type": "string"
+    },
+    "metrics": {
+      "$ref": "#/$defs/ProductBusinessMetricCandidates"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "platform_product_id": {
+      "pattern": "^[1-9][0-9]{0,127}$",
+      "title": "Platform Product Id",
+      "type": "string"
+    },
+    "result_granularity": {
+      "const": "DAILY_AGGREGATE",
+      "default": "DAILY_AGGREGATE",
+      "title": "Result Granularity",
+      "type": "string"
+    },
+    "source_classification_verified": {
+      "const": false,
+      "default": false,
+      "title": "Source Classification Verified",
+      "type": "boolean"
+    },
+    "source_updated_at": {
+      "default": null,
+      "title": "Source Updated At",
+      "type": "null"
+    },
+    "window_kind": {
+      "const": "YESTERDAY",
+      "default": "YESTERDAY",
+      "title": "Window Kind",
+      "type": "string"
+    }
+  },
+  "required": [
+    "business_date",
+    "platform_product_id",
+    "metrics",
+    "observed_at"
+  ],
+  "title": "ProductBusinessMetricCandidateRecord",
+  "type": "object"
+}

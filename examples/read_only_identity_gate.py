@@ -9,6 +9,8 @@ from urllib.parse import urlsplit
 
 from playwright.async_api import Response, async_playwright
 
+from pdd_data_mcp.browser.cdp import same_page_url
+
 CDP_ENDPOINT = "http://127.0.0.1:9222"
 IDENTITY_PAGE = "https://mms.pinduoduo.com/mallcenter/info/basic"
 REQUIRED_PAGES = {
@@ -36,9 +38,12 @@ async def verify(expected_sha256: str) -> None:
     browser = await manager.chromium.connect_over_cdp(CDP_ENDPOINT)
     try:
         pages = [page for context in browser.contexts for page in context.pages]
-        targets = {page.url.rstrip("/"): page for page in pages}
-        required = {url.rstrip("/") for url in REQUIRED_PAGES}
-        identity_page = targets.get(IDENTITY_PAGE.rstrip("/"))
+        required_present = all(
+            any(same_page_url(page.url, required) for page in pages) for required in REQUIRED_PAGES
+        )
+        identity_page = next(
+            (page for page in pages if same_page_url(page.url, IDENTITY_PAGE)), None
+        )
         if identity_page is None:
             raise RuntimeError("identity page is not open")
         async with identity_page.expect_response(_matches, timeout=20_000) as response_info:
@@ -55,7 +60,7 @@ async def verify(expected_sha256: str) -> None:
         page_text = await identity_page.locator("html").text_content()
         result = {
             "status": "PASS",
-            "required_pages_present": required.issubset(targets),
+            "required_pages_present": required_present,
             "identity_response_verified": True,
             "page_state_exact_match": isinstance(page_text, str) and identity in page_text,
             "matches_expected_identity": digest == expected_sha256,
@@ -63,7 +68,6 @@ async def verify(expected_sha256: str) -> None:
         }
         print(json.dumps(result, ensure_ascii=True, separators=(",", ":")))
     finally:
-        await browser.close()
         await manager.stop()
 
 

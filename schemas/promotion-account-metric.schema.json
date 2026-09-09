@@ -1,0 +1,256 @@
+{
+  "$defs": {
+    "PromotedProductEffectMetrics": {
+      "additionalProperties": false,
+      "description": "Effect values for one promoted-product row or the response summary.",
+      "properties": {
+        "click_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Click Count"
+        },
+        "gmv_cents": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gmv Cents"
+        },
+        "impression_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Impression Count"
+        },
+        "missing_reasons": {
+          "additionalProperties": {
+            "enum": [
+              "SOURCE_FIELD_MISSING",
+              "SOURCE_VALUE_NULL"
+            ],
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "spend_cents",
+              "order_spend_cents",
+              "order_spend_roi",
+              "order_spend_net_roi",
+              "net_order_count",
+              "order_count",
+              "gmv_cents",
+              "net_gmv_cents",
+              "impression_count",
+              "click_count",
+              "settlement_roi",
+              "settlement_order_count"
+            ]
+          },
+          "title": "Missing Reasons",
+          "type": "object"
+        },
+        "net_gmv_cents": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Net Gmv Cents"
+        },
+        "net_order_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Net Order Count"
+        },
+        "order_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order Count"
+        },
+        "order_spend_cents": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order Spend Cents"
+        },
+        "order_spend_net_roi": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order Spend Net Roi"
+        },
+        "order_spend_roi": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order Spend Roi"
+        },
+        "settlement_order_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Settlement Order Count"
+        },
+        "settlement_roi": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Settlement Roi"
+        },
+        "spend_cents": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spend Cents"
+        }
+      },
+      "title": "PromotedProductEffectMetrics",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One verified account/day promotion report.\n\nAccount metrics deliberately reuse the fixed twelve-field effect model.  A\nfree-form metric mapping would make a changed platform field look like a\ncompatible account snapshot.",
+  "properties": {
+    "business_date": {
+      "description": "Business date normalized from the exact PDD YYYY-MM-DD 00:00:00 response value.",
+      "format": "date",
+      "title": "Business Date",
+      "type": "string"
+    },
+    "entity_granularity": {
+      "const": "ACCOUNT",
+      "default": "ACCOUNT",
+      "title": "Entity Granularity",
+      "type": "string"
+    },
+    "metrics": {
+      "$ref": "#/$defs/PromotedProductEffectMetrics"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "source_updated_at": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Matched result.reportLastUpdateTime and result.lastUpdateTime value.",
+      "title": "Source Updated At"
+    },
+    "source_updated_at_missing_reason": {
+      "anyOf": [
+        {
+          "enum": [
+            "SOURCE_FIELD_MISSING",
+            "SOURCE_VALUE_NULL"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Source Updated At Missing Reason"
+    }
+  },
+  "required": [
+    "business_date",
+    "metrics",
+    "observed_at"
+  ],
+  "title": "PromotionAccountMetricPayload",
+  "type": "object"
+}

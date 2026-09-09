@@ -13,6 +13,8 @@ from pdd_data_mcp.browser.parsing import (
     parse_promotion_response,
 )
 from pdd_data_mcp.browser.promotion import PromotionOverviewCdpCollector
+from pdd_data_mcp.browser.promotion_account import PromotionAccountCdpCollector
+from pdd_data_mcp.browser.promotion_metrics import PromotionMetricsCdpCollector
 
 __all__ = [
     "CdpConnector",
@@ -20,6 +22,8 @@ __all__ = [
     "CoreDataCdpCollector",
     "ParsedDomMoney",
     "ParsedPromotionResponse",
+    "PromotionAccountCdpCollector",
+    "PromotionMetricsCdpCollector",
     "PromotionOverviewCdpCollector",
     "RealDatasetCollector",
     "parse_dom_money",

@@ -17,7 +17,9 @@
         "inventory",
         "promotion_overview",
         "product_metrics",
+        "product_business_metrics",
         "campaign_metrics",
+        "promotion_configuration",
         "activity_catalog"
       ],
       "title": "DatasetType",

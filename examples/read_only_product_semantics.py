@@ -9,6 +9,8 @@ from urllib.parse import urlsplit
 
 from playwright.async_api import Response, async_playwright
 
+from pdd_data_mcp.browser.cdp import same_page_url
+
 TARGET_URL = "https://mms.pinduoduo.com/goods/goods_list"
 RESPONSE_PATH = "/vodka/v2/mms/query/display/mall/goodsList"
 TOTAL_SELECTOR = "li[class*='PGT_totalText_']"
@@ -48,7 +50,7 @@ async def verify(expected_sha256: str) -> None:
     try:
         pages = [page for context in browser.contexts for page in context.pages]
         page = next(
-            (candidate for candidate in pages if candidate.url.rstrip("/") == TARGET_URL), None
+            (candidate for candidate in pages if same_page_url(candidate.url, TARGET_URL)), None
         )
         if page is None:
             raise RuntimeError("exact product page is not open")
@@ -79,12 +81,22 @@ async def verify(expected_sha256: str) -> None:
             if isinstance(sku, dict)
         ]
         total_locator = page.locator(TOTAL_SELECTOR)
+        await total_locator.wait_for(state="attached", timeout=10_000)
         dom_count = await total_locator.count()
         dom_text = await total_locator.first.text_content() if dom_count else None
         dom_numbers = re.findall(r"\d[\d,]*", dom_text or "")
         dom_total = int(dom_numbers[0].replace(",", "")) if len(dom_numbers) == 1 else None
+        passed = (
+            isinstance(total, int)
+            and total == len(items)
+            and len(set(map(str, ids))) == len(items)
+            and len(mall_ids) == 1
+            and mall_ids == {expected_sha256}
+            and dom_count == 1
+            and dom_total == total
+        )
         output = {
-            "status": "PASS",
+            "status": "PASS" if passed else "FAIL",
             "response_success": True,
             "platform_total": total,
             "response_list_count": len(items),
@@ -114,8 +126,9 @@ async def verify(expected_sha256: str) -> None:
             "network_dom_total_match": isinstance(total, int) and dom_total == total,
         }
         print(json.dumps(output, ensure_ascii=True, separators=(",", ":")))
+        if not passed:
+            raise SystemExit(1)
     finally:
-        await browser.close()
         await manager.stop()
 
 

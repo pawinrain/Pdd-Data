@@ -6,6 +6,8 @@ import re
 
 from playwright.async_api import async_playwright
 
+from pdd_data_mcp.browser.cdp import same_page_url
+
 TARGET_URL = "https://mms.pinduoduo.com/home"
 LABELS = ["成交金额", "成交订单数", "商品访客数", "商品浏览量", "商品评价数"]
 
@@ -33,7 +35,7 @@ async def main() -> None:
     try:
         pages = [page for context in browser.contexts for page in context.pages]
         page = next(
-            (candidate for candidate in pages if candidate.url.rstrip("/") == TARGET_URL), None
+            (candidate for candidate in pages if same_page_url(candidate.url, TARGET_URL)), None
         )
         if page is None:
             raise RuntimeError("exact home page is not open")
@@ -93,7 +95,6 @@ async def main() -> None:
             )
         )
     finally:
-        await browser.close()
         await manager.stop()
 
 

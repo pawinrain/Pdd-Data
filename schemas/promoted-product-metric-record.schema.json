@@ -1,0 +1,243 @@
+{
+  "$defs": {
+    "PromotedProductEffectMetrics": {
+      "additionalProperties": false,
+      "description": "Effect values for one promoted-product row or the response summary.",
+      "properties": {
+        "click_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Click Count"
+        },
+        "gmv_cents": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Gmv Cents"
+        },
+        "impression_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Impression Count"
+        },
+        "missing_reasons": {
+          "additionalProperties": {
+            "enum": [
+              "SOURCE_FIELD_MISSING",
+              "SOURCE_VALUE_NULL"
+            ],
+            "type": "string"
+          },
+          "propertyNames": {
+            "enum": [
+              "spend_cents",
+              "order_spend_cents",
+              "order_spend_roi",
+              "order_spend_net_roi",
+              "net_order_count",
+              "order_count",
+              "gmv_cents",
+              "net_gmv_cents",
+              "impression_count",
+              "click_count",
+              "settlement_roi",
+              "settlement_order_count"
+            ]
+          },
+          "title": "Missing Reasons",
+          "type": "object"
+        },
+        "net_gmv_cents": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Net Gmv Cents"
+        },
+        "net_order_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Net Order Count"
+        },
+        "order_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order Count"
+        },
+        "order_spend_cents": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order Spend Cents"
+        },
+        "order_spend_net_roi": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order Spend Net Roi"
+        },
+        "order_spend_roi": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Order Spend Roi"
+        },
+        "settlement_order_count": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Settlement Order Count"
+        },
+        "settlement_roi": {
+          "anyOf": [
+            {
+              "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Settlement Roi"
+        },
+        "spend_cents": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Spend Cents"
+        }
+      },
+      "title": "PromotedProductEffectMetrics",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One adInfo row; campaign_id is an association, not campaign granularity.",
+  "properties": {
+    "ad_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Ad Id",
+      "type": "string"
+    },
+    "campaign_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "entity_granularity": {
+      "const": "PROMOTED_PRODUCT",
+      "default": "PROMOTED_PRODUCT",
+      "title": "Entity Granularity",
+      "type": "string"
+    },
+    "metrics": {
+      "$ref": "#/$defs/PromotedProductEffectMetrics"
+    },
+    "observed_at": {
+      "format": "date-time",
+      "title": "Observed At",
+      "type": "string"
+    },
+    "platform_product_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Platform Product Id",
+      "type": "string"
+    },
+    "source_updated_at": {
+      "format": "date-time",
+      "title": "Source Updated At",
+      "type": "string"
+    }
+  },
+  "required": [
+    "ad_id",
+    "campaign_id",
+    "platform_product_id",
+    "metrics",
+    "observed_at",
+    "source_updated_at"
+  ],
+  "title": "PromotedProductMetricRecord",
+  "type": "object"
+}

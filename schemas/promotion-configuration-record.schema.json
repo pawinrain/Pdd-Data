@@ -1,0 +1,111 @@
+{
+  "additionalProperties": false,
+  "description": "Current-only settings observed on one promoted-product row.",
+  "properties": {
+    "ad_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Ad Id",
+      "type": "string"
+    },
+    "ad_status": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Ad Status"
+    },
+    "agent_bid": {
+      "anyOf": [
+        {
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Agent Bid"
+    },
+    "campaign_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Campaign Id",
+      "type": "string"
+    },
+    "configuration_observed_at": {
+      "format": "date-time",
+      "title": "Configuration Observed At",
+      "type": "string"
+    },
+    "entity_granularity": {
+      "const": "PROMOTED_PRODUCT",
+      "default": "PROMOTED_PRODUCT",
+      "title": "Entity Granularity",
+      "type": "string"
+    },
+    "max_cost_cents": {
+      "anyOf": [
+        {
+          "minimum": 0,
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Max Cost Cents"
+    },
+    "missing_reasons": {
+      "additionalProperties": {
+        "enum": [
+          "SOURCE_FIELD_MISSING",
+          "SOURCE_VALUE_NULL"
+        ],
+        "type": "string"
+      },
+      "propertyNames": {
+        "enum": [
+          "max_cost_cents",
+          "target_roi",
+          "agent_bid",
+          "ad_status"
+        ]
+      },
+      "title": "Missing Reasons",
+      "type": "object"
+    },
+    "platform_product_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$",
+      "title": "Platform Product Id",
+      "type": "string"
+    },
+    "target_roi": {
+      "anyOf": [
+        {
+          "pattern": "^(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Target Roi"
+    }
+  },
+  "required": [
+    "ad_id",
+    "campaign_id",
+    "platform_product_id",
+    "configuration_observed_at"
+  ],
+  "title": "PromotionConfigurationRecord",
+  "type": "object"
+}

@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo
 from pdd_data_mcp.application import PddDataService
 from pdd_data_mcp.browser import (
     CoreDataCdpCollector,
+    PromotionAccountCdpCollector,
+    PromotionMetricsCdpCollector,
     PromotionOverviewCdpCollector,
     RealDatasetCollector,
 )
@@ -40,6 +42,16 @@ def _service(config: AppConfig, repository: LocalFileSnapshotRepository) -> PddD
     real_collectors = {
         connection.connection_id: RealDatasetCollector(
             promotion=PromotionOverviewCdpCollector(
+                connection=connection,
+                collection=config.collection,
+                runtime_root=config.storage.runtime_root,
+            ),
+            promotion_account=PromotionAccountCdpCollector(
+                connection=connection,
+                collection=config.collection,
+                runtime_root=config.storage.runtime_root,
+            ),
+            promotion_metrics=PromotionMetricsCdpCollector(
                 connection=connection,
                 collection=config.collection,
                 runtime_root=config.storage.runtime_root,
@@ -111,6 +123,29 @@ def _maintenance(config: AppConfig, command: str) -> dict[str, object]:
     raise ValueError(command)
 
 
+def _invalidate_snapshot(
+    config: AppConfig,
+    *,
+    snapshot_id: str,
+    reason_code: str,
+    replacement_scope_version: str,
+) -> dict[str, object]:
+    repository = _repository(config)
+    with repository.service_lock(timeout=0):
+        repository.initialize()
+        record = repository.invalidate_snapshot(
+            snapshot_id=snapshot_id,
+            reason_code=reason_code,
+            replacement_scope_version=replacement_scope_version,
+        )
+    return {
+        "status": "PASS",
+        "effective_status": "SEMANTICALLY_INVALIDATED",
+        "invalidation": record.model_dump(mode="json"),
+        "snapshot_manifest_modified": False,
+    }
+
+
 def _fail(message: str, code: int = 2) -> NoReturn:
     print(message, file=sys.stderr)
     raise SystemExit(code)
@@ -125,6 +160,16 @@ def build_parser() -> argparse.ArgumentParser:
         item.add_argument("--config", type=Path, required=True)
     schema_parser = subparsers.add_parser("export-schemas")
     schema_parser.add_argument("--output", type=Path, required=True)
+    invalidation_parser = subparsers.add_parser("invalidate-snapshot")
+    invalidation_parser.add_argument("--config", type=Path, required=True)
+    invalidation_parser.add_argument("--snapshot-id", required=True)
+    invalidation_parser.add_argument(
+        "--reason-code",
+        required=True,
+        choices=["METRIC_WINDOW_END_MISLABELED"],
+    )
+    invalidation_parser.add_argument("--replacement-scope-version", required=True)
+    invalidation_parser.add_argument("--confirm-semantic-invalidation", action="store_true")
     return parser
 
 
@@ -137,7 +182,19 @@ def main(argv: list[str] | None = None) -> None:
             written = export_schemas(args.output.resolve(strict=False))
             _print_json({"status": "PASS", "schemas": written})
             return
+        if args.command == "invalidate-snapshot" and not args.confirm_semantic_invalidation:
+            _fail("--confirm-semantic-invalidation is required")
         config = load_config(args.config)
+        if args.command == "invalidate-snapshot":
+            _print_json(
+                _invalidate_snapshot(
+                    config,
+                    snapshot_id=args.snapshot_id,
+                    reason_code=args.reason_code,
+                    replacement_scope_version=args.replacement_scope_version,
+                )
+            )
+            return
         if args.command == "serve":
             _serve(config)
             return

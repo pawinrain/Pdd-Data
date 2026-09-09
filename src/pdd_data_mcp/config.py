@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import tomllib
 from pathlib import Path
 from typing import Literal
@@ -307,6 +308,386 @@ class StoreMetricSettings(StrictModel):
         return self
 
 
+PromotionWindowName = Literal[
+    "TODAY",
+    "YESTERDAY",
+    "LAST_7_DAYS",
+    "LAST_30_DAYS",
+    "LAST_90_DAYS",
+]
+
+
+PromotionAccountWindowName = Literal["TODAY", "YESTERDAY"]
+
+
+class PromotionAccountAdapterSettings(CoreAdapterBaseSettings):
+    """Evidence-bound account/day promotion report adapter."""
+
+    response_content_type: Literal["application/json"] = "application/json"
+    request_contract_version: Literal["", "PROMOTION_ACCOUNT_HOURLY_DUAL_V1"] = ""
+    supported_windows: list[PromotionAccountWindowName] = Field(default_factory=list, max_length=2)
+    daily_report_list_path: str = Field(default="", max_length=256)
+    summary_path: str = Field(default="", max_length=256)
+    daily_business_date_path: str = Field(default="", max_length=256)
+    request_date_format: Literal["", "PDD_MIDNIGHT_SECONDS"] = ""
+    response_date_format: Literal["", "PDD_MIDNIGHT_SECONDS"] = ""
+    result_source_updated_at_path: str = Field(default="", max_length=256)
+    secondary_source_updated_at_path: str = Field(default="", max_length=256)
+    request_entity_id_field: str = Field(default="", max_length=64)
+    request_start_date_field: str = Field(default="", max_length=64)
+    request_end_date_field: str = Field(default="", max_length=64)
+    request_query_dimension_type_field: str = Field(default="", max_length=64)
+    request_report_promotion_type_field: str = Field(default="", max_length=64)
+    request_client_type_field: str = Field(default="", max_length=64)
+    request_end_day_hour_field: str = Field(default="", max_length=64)
+    request_return_last_update_time_field: str = Field(default="", max_length=64)
+    request_block_types_field: str = Field(default="", max_length=64)
+    request_crawler_info_field: str = Field(default="", max_length=64)
+    request_crawler_info_max_length: int = Field(default=4096, ge=1, le=16_384)
+    request_end_day_hour_semantics: Literal["INCLUSIVE_HOURLY_ROW_INDEX_WITH_DOM_CUTOFF"] = (
+        "INCLUSIVE_HOURLY_ROW_INDEX_WITH_DOM_CUTOFF"
+    )
+    dom_today_spend_selector: str = Field(default="", max_length=512)
+    dom_yesterday_spend_selector: str = Field(default="", max_length=512)
+    dom_report_date_explanation_selector: str = Field(default="", max_length=512)
+    dom_spend_unit: Literal["CNY"] = "CNY"
+
+    @field_validator(
+        "daily_report_list_path",
+        "summary_path",
+        "daily_business_date_path",
+        "result_source_updated_at_path",
+        "secondary_source_updated_at_path",
+        "request_entity_id_field",
+        "request_start_date_field",
+        "request_end_date_field",
+        "request_query_dimension_type_field",
+        "request_report_promotion_type_field",
+        "request_client_type_field",
+        "request_end_day_hour_field",
+        "request_return_last_update_time_field",
+        "request_block_types_field",
+        "request_crawler_info_field",
+    )
+    @classmethod
+    def validate_promotion_account_path(cls, value: str) -> str:
+        return PromotionAdapterSettings.validate_json_path(value)
+
+    @model_validator(mode="after")
+    def validate_verified_promotion_account(self) -> PromotionAccountAdapterSettings:
+        if not self.verified:
+            return self
+        if self.data_source != "NETWORK_RESPONSE":
+            raise ValueError("promotion account metrics require a verified network response")
+        if self.request_contract_version != "PROMOTION_ACCOUNT_HOURLY_DUAL_V1":
+            raise ValueError("verified promotion account adapter requires its request contract")
+        if self.parser_version != "d4-account-v3":
+            raise ValueError("verified promotion account adapter requires parser d4-account-v3")
+        if (
+            self.request_date_format != "PDD_MIDNIGHT_SECONDS"
+            or self.response_date_format != "PDD_MIDNIGHT_SECONDS"
+        ):
+            raise ValueError("verified promotion account adapter requires midnight-second dates")
+        evidenced_transport = {
+            "target_page_url": (
+                self.target_page_url,
+                "https://yingxiao.pinduoduo.com/mains/promotionOverview",
+            ),
+            "response_host": (self.response_host, "yingxiao.pinduoduo.com"),
+            "response_path": (
+                self.response_path,
+                "/mms-gateway/poseidon/api/report/queryHourlyRangeReport",
+            ),
+            "response_method": (self.response_method, "POST"),
+            "response_http_status": (self.response_http_status, 200),
+            "response_content_type": (self.response_content_type, "application/json"),
+            "trigger": (self.trigger, "RELOAD"),
+            "identity_source": (self.identity_source, "IDENTITY_RESPONSE"),
+            "identity_response_host": (
+                self.identity_response_host,
+                "yingxiao.pinduoduo.com",
+            ),
+            "identity_response_path": (
+                self.identity_response_path,
+                "/mms-gateway/venus/api/user/info",
+            ),
+            "identity_response_method": (self.identity_response_method, "POST"),
+            "identity_response_http_status": (self.identity_response_http_status, 200),
+            "identity_business_success_path": (
+                self.identity_business_success_path,
+                "success",
+            ),
+            "identity_platform_store_id_path": (
+                self.identity_platform_store_id_path,
+                "result.mallId",
+            ),
+            "dom_report_date_explanation_selector": (
+                self.dom_report_date_explanation_selector,
+                "div[class*='ReportDateExplain_content__']",
+            ),
+        }
+        changed_transport = sorted(
+            name
+            for name, (actual, expected) in evidenced_transport.items()
+            if type(actual) is not type(expected) or actual != expected
+        )
+        if changed_transport:
+            raise ValueError(
+                "verified promotion account transport changed: " + ", ".join(changed_transport)
+            )
+        if type(self.business_success_value) is not bool or self.business_success_value is not True:
+            raise ValueError("verified promotion account adapter requires exact success=true")
+        if (
+            type(self.identity_business_success_value) is not bool
+            or self.identity_business_success_value is not True
+        ):
+            raise ValueError("verified promotion account identity requires exact success=true")
+
+        evidenced_values = {
+            "business_success_path": (self.business_success_path, "success"),
+            "daily_report_list_path": (self.daily_report_list_path, "result.dailyReportList"),
+            "summary_path": (self.summary_path, "result.sumReport"),
+            "daily_business_date_path": (self.daily_business_date_path, "date"),
+            "result_source_updated_at_path": (
+                self.result_source_updated_at_path,
+                "result.reportLastUpdateTime",
+            ),
+            "secondary_source_updated_at_path": (
+                self.secondary_source_updated_at_path,
+                "result.lastUpdateTime",
+            ),
+            "request_entity_id_field": (self.request_entity_id_field, "entityId"),
+            "request_start_date_field": (self.request_start_date_field, "startDate"),
+            "request_end_date_field": (self.request_end_date_field, "endDate"),
+            "request_query_dimension_type_field": (
+                self.request_query_dimension_type_field,
+                "queryDimensionType",
+            ),
+            "request_report_promotion_type_field": (
+                self.request_report_promotion_type_field,
+                "reportPromotionType",
+            ),
+            "request_client_type_field": (self.request_client_type_field, "clientType"),
+            "request_end_day_hour_field": (self.request_end_day_hour_field, "endDayHour"),
+            "request_return_last_update_time_field": (
+                self.request_return_last_update_time_field,
+                "returnLastUpdateTime",
+            ),
+            "request_block_types_field": (self.request_block_types_field, "blockTypes"),
+            "request_crawler_info_field": (self.request_crawler_info_field, "crawlerInfo"),
+        }
+        changed = sorted(
+            name for name, (actual, expected) in evidenced_values.items() if actual != expected
+        )
+        if changed:
+            raise ValueError(
+                "verified promotion account evidence fields changed: " + ", ".join(changed)
+            )
+        if len(self.supported_windows) != 2 or set(self.supported_windows) != {
+            "TODAY",
+            "YESTERDAY",
+        }:
+            raise ValueError("verified promotion account adapter supports only TODAY and YESTERDAY")
+        if not self.dom_today_spend_selector or not self.dom_yesterday_spend_selector:
+            raise ValueError("verified promotion account adapter requires both DOM spend selectors")
+        if self.dom_today_spend_selector == self.dom_yesterday_spend_selector:
+            raise ValueError("TODAY and YESTERDAY DOM spend selectors must be different")
+        return self
+
+
+class PromotionMetricsAdapterSettings(CoreAdapterBaseSettings):
+    """Evidence-bound promoted-product metrics and current configuration adapter."""
+
+    request_contract_version: Literal["", "PROMOTED_PRODUCT_LIST_UNFILTERED_V1"] = ""
+    request_crawler_info_max_length: int = Field(default=4096, ge=1, le=16_384)
+    supported_windows: list[PromotionWindowName] = Field(default_factory=list, max_length=5)
+    quick_option_testids: dict[PromotionWindowName, str] = Field(default_factory=dict, max_length=5)
+    list_path: str = Field(default="", max_length=256)
+    summary_path: str = Field(default="", max_length=256)
+    source_updated_at_path: str = Field(default="", max_length=256)
+    row_platform_store_id_path: str = Field(default="", max_length=256)
+    promotion_id_path: str = Field(default="", max_length=256)
+    campaign_id_path: str = Field(default="", max_length=256)
+    platform_product_id_path: str = Field(default="", max_length=256)
+    product_name_path: str = Field(default="", max_length=256)
+    report_path: str = Field(default="", max_length=256)
+    max_cost_path: str = Field(default="", max_length=256)
+    target_roi_path: str = Field(default="", max_length=256)
+    agent_bid_path: str = Field(default="", max_length=256)
+    ad_status_path: str = Field(default="", max_length=256)
+    request_begin_date_field: str = Field(default="", max_length=64)
+    request_end_date_field: str = Field(default="", max_length=64)
+    request_page_number_field: str = Field(default="", max_length=64)
+    request_page_size_field: str = Field(default="", max_length=64)
+    platform_page_size: int = Field(default=50, ge=1, le=200)
+    pagination_terminal_rule: Literal["SHORT_PAGE"] = "SHORT_PAGE"
+    dom_row_selector: str = Field(default="", max_length=512)
+    reload_resets_to_today: bool = False
+    configuration_current_only: bool = True
+
+    @field_validator(
+        "list_path",
+        "summary_path",
+        "source_updated_at_path",
+        "row_platform_store_id_path",
+        "promotion_id_path",
+        "campaign_id_path",
+        "platform_product_id_path",
+        "product_name_path",
+        "report_path",
+        "max_cost_path",
+        "target_roi_path",
+        "agent_bid_path",
+        "ad_status_path",
+        "request_begin_date_field",
+        "request_end_date_field",
+        "request_page_number_field",
+        "request_page_size_field",
+    )
+    @classmethod
+    def validate_promotion_metrics_path(cls, value: str) -> str:
+        return PromotionAdapterSettings.validate_json_path(value)
+
+    @field_validator("quick_option_testids")
+    @classmethod
+    def validate_quick_option_testids(
+        cls, value: dict[PromotionWindowName, str]
+    ) -> dict[PromotionWindowName, str]:
+        if len(set(value.values())) != len(value):
+            raise ValueError("promotion window test IDs must be unique")
+        if any(not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,127}", item) for item in value.values()):
+            raise ValueError("promotion window test IDs must be fixed safe identifiers")
+        return value
+
+    @model_validator(mode="after")
+    def validate_verified_promotion_metrics(self) -> PromotionMetricsAdapterSettings:
+        if not self.verified:
+            return self
+        if self.data_source != "NETWORK_RESPONSE":
+            raise ValueError("promotion metrics require a verified network response")
+        if self.request_contract_version != "PROMOTED_PRODUCT_LIST_UNFILTERED_V1":
+            raise ValueError("verified promotion metrics require the evidenced request contract")
+        if self.supported_windows != ["TODAY"]:
+            raise ValueError("verified promoted-product metrics support only evidenced TODAY")
+        if self.quick_option_testids != {"TODAY": "DateAreaQuickOption_0"}:
+            raise ValueError(
+                "verified promoted-product metrics require the evidenced TODAY test ID"
+            )
+        if self.platform_page_size != 50:
+            raise ValueError("verified promoted-product metrics require evidenced page size 50")
+        evidenced_transport = {
+            "target_page_url": (
+                self.target_page_url,
+                "https://yingxiao.pinduoduo.com/goods/promotion/list",
+            ),
+            "response_host": (self.response_host, "yingxiao.pinduoduo.com"),
+            "response_path": (
+                self.response_path,
+                "/mms-gateway/venus/api/goods/promotion/v3/list",
+            ),
+            "response_method": (self.response_method, "POST"),
+            "response_http_status": (self.response_http_status, 200),
+            "business_success_path": (self.business_success_path, "success"),
+            "business_success_value": (self.business_success_value, True),
+            "identity_source": (self.identity_source, "IDENTITY_RESPONSE"),
+            "identity_response_host": (
+                self.identity_response_host,
+                "yingxiao.pinduoduo.com",
+            ),
+            "identity_response_path": (
+                self.identity_response_path,
+                "/mms-gateway/venus/api/user/userInfo",
+            ),
+            "identity_response_method": (self.identity_response_method, "POST"),
+            "identity_response_http_status": (self.identity_response_http_status, 200),
+            "identity_business_success_path": (
+                self.identity_business_success_path,
+                "success",
+            ),
+            "identity_business_success_value": (
+                self.identity_business_success_value,
+                True,
+            ),
+            "identity_platform_store_id_path": (
+                self.identity_platform_store_id_path,
+                "result.mall.mallId",
+            ),
+            "parser_version": (
+                self.parser_version,
+                "pdd-promoted-product-v3/1.0.0",
+            ),
+            "trigger": (self.trigger, "RELOAD"),
+            "dom_row_selector": (self.dom_row_selector, "tbody tr"),
+        }
+        changed_transport = sorted(
+            name
+            for name, (actual, expected) in evidenced_transport.items()
+            if type(actual) is not type(expected) or actual != expected
+        )
+        if changed_transport:
+            raise ValueError(
+                "verified promoted-product transport changed: " + ", ".join(changed_transport)
+            )
+        evidenced_paths = {
+            "list_path": "result.adInfos",
+            "summary_path": "result.sumReportInfo",
+            "source_updated_at_path": "result.reportLastUpdateTime",
+            "row_platform_store_id_path": "mallId",
+            "promotion_id_path": "adId",
+            "campaign_id_path": "planId",
+            "platform_product_id_path": "goodsId",
+            "product_name_path": "goodsInfo.goodsName",
+            "report_path": "reportInfo",
+            "max_cost_path": "maxCost",
+            "target_roi_path": "targetRoi",
+            "agent_bid_path": "agentBid",
+            "ad_status_path": "adStatus",
+            "request_begin_date_field": "beginDate",
+            "request_end_date_field": "endDate",
+            "request_page_number_field": "pageNumber",
+            "request_page_size_field": "pageSize",
+        }
+        changed_paths = sorted(
+            field for field, expected in evidenced_paths.items() if getattr(self, field) != expected
+        )
+        if changed_paths:
+            raise ValueError(
+                "verified promoted-product evidence paths changed: " + ", ".join(changed_paths)
+            )
+        required = {
+            "list_path": self.list_path,
+            "summary_path": self.summary_path,
+            "source_updated_at_path": self.source_updated_at_path,
+            "row_platform_store_id_path": self.row_platform_store_id_path,
+            "promotion_id_path": self.promotion_id_path,
+            "campaign_id_path": self.campaign_id_path,
+            "platform_product_id_path": self.platform_product_id_path,
+            "product_name_path": self.product_name_path,
+            "report_path": self.report_path,
+            "max_cost_path": self.max_cost_path,
+            "target_roi_path": self.target_roi_path,
+            "agent_bid_path": self.agent_bid_path,
+            "ad_status_path": self.ad_status_path,
+            "request_begin_date_field": self.request_begin_date_field,
+            "request_end_date_field": self.request_end_date_field,
+            "request_page_number_field": self.request_page_number_field,
+            "request_page_size_field": self.request_page_size_field,
+            "dom_row_selector": self.dom_row_selector,
+        }
+        missing = sorted(name for name, value in required.items() if not value)
+        if missing:
+            raise ValueError(f"verified promotion metrics adapter is missing: {', '.join(missing)}")
+        if not self.supported_windows:
+            raise ValueError("verified promotion metrics adapter requires supported windows")
+        if set(self.quick_option_testids) != set(self.supported_windows):
+            raise ValueError("every supported promotion window requires one exact test ID")
+        if not self.reload_resets_to_today:
+            raise ValueError("verified adapter requires an evidenced reload-to-TODAY gate")
+        if not self.configuration_current_only:
+            raise ValueError("promotion configuration must remain current-only")
+        return self
+
+
 class StoreOverviewAdapterSettings(CoreAdapterBaseSettings):
     business_date_path: str = Field(default="", max_length=256)
     business_date_format: Literal["ISO_DATE", "ISO_DATETIME_SECONDS"] = "ISO_DATE"
@@ -453,6 +834,12 @@ class ConnectionSettings(StrictModel):
     synthetic_enabled: bool = False
     discovery: DiscoverySettings = Field(default_factory=DiscoverySettings)
     promotion_adapter: PromotionAdapterSettings = Field(default_factory=PromotionAdapterSettings)
+    promotion_account_adapter: PromotionAccountAdapterSettings = Field(
+        default_factory=PromotionAccountAdapterSettings
+    )
+    promotion_metrics_adapter: PromotionMetricsAdapterSettings = Field(
+        default_factory=PromotionMetricsAdapterSettings
+    )
     store_overview_adapter: StoreOverviewAdapterSettings = Field(
         default_factory=StoreOverviewAdapterSettings
     )
@@ -507,6 +894,8 @@ class ConnectionSettings(StrictModel):
                     "real collection requires exactly one expected platform store identity"
                 )
             core_adapters = (
+                self.promotion_account_adapter,
+                self.promotion_metrics_adapter,
                 self.store_overview_adapter,
                 self.product_catalog_adapter,
                 self.inventory_adapter,
@@ -568,6 +957,8 @@ class AppConfig(StrictModel):
             ):
                 raise ValueError("real identity response host must be an exact Pinduoduo host")
             core_adapters = (
+                connection.promotion_account_adapter,
+                connection.promotion_metrics_adapter,
                 connection.store_overview_adapter,
                 connection.product_catalog_adapter,
                 connection.inventory_adapter,

@@ -6,6 +6,8 @@ import json
 
 from playwright.async_api import async_playwright
 
+from pdd_data_mcp.browser.cdp import same_page_url
+
 
 async def probe(target_url: str, pattern: str) -> None:
     manager = await async_playwright().start()
@@ -13,11 +15,7 @@ async def probe(target_url: str, pattern: str) -> None:
     try:
         pages = [page for context in browser.contexts for page in context.pages]
         page = next(
-            (
-                candidate
-                for candidate in pages
-                if candidate.url.rstrip("/") == target_url.rstrip("/")
-            ),
+            (candidate for candidate in pages if same_page_url(candidate.url, target_url)),
             None,
         )
         if page is None:
@@ -55,7 +53,6 @@ async def probe(target_url: str, pattern: str) -> None:
             )
         )
     finally:
-        await browser.close()
         await manager.stop()
 
 

@@ -8,6 +8,8 @@ from urllib.parse import urlsplit
 
 from playwright.async_api import Response, async_playwright
 
+from pdd_data_mcp.browser.cdp import same_page_url
+
 
 async def inspect(target_url: str, observe_seconds: float) -> None:
     manager = await async_playwright().start()
@@ -39,11 +41,7 @@ async def inspect(target_url: str, observe_seconds: float) -> None:
     try:
         pages = [page for context in browser.contexts for page in context.pages]
         page = next(
-            (
-                candidate
-                for candidate in pages
-                if candidate.url.rstrip("/") == target_url.rstrip("/")
-            ),
+            (candidate for candidate in pages if same_page_url(candidate.url, target_url)),
             None,
         )
         if page is None:
@@ -77,7 +75,6 @@ async def inspect(target_url: str, observe_seconds: float) -> None:
             )
         )
     finally:
-        await browser.close()
         await manager.stop()
 
 
