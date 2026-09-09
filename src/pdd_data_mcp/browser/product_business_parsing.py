@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Callable
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
+from pdd_data_mcp.browser.dynamic_digit_font import (
+    BoundDynamicDigitFont,
+    fetch_dynamic_digit_font,
+)
 from pdd_data_mcp.browser.parsing import decode_json_object
 from pdd_data_mcp.contracts.models import (
     MetricWindow,
@@ -49,6 +54,24 @@ _MISSING = object()
 
 
 @dataclass(frozen=True)
+class DecodedProductBusinessMetricCandidates:
+    """Numeric-format candidates decoded without asserting business units."""
+
+    paying_buyer_count: str | None
+    paid_order_count: str | None
+    paid_goods_quantity: str | None
+    paid_amount: str | None
+    goods_visitor_count: str | None
+    goods_page_view_count: str | None
+
+
+@dataclass(frozen=True)
+class DecodedProductBusinessMetricCandidateRecord:
+    platform_product_id: str
+    metrics: DecodedProductBusinessMetricCandidates
+
+
+@dataclass(frozen=True)
 class ParsedProductBusinessResponse:
     records: list[ProductBusinessMetricCandidateRecord]
     metric_window: MetricWindow
@@ -61,6 +84,12 @@ class ParsedProductBusinessResponse:
     source_updated_at: None = None
     identity_verified: Literal[False] = False
     source_classification_verified: Literal[False] = False
+    decoded_records: list[DecodedProductBusinessMetricCandidateRecord] | None = None
+    font_sha256: str | None = None
+    font_profile_version: str | None = None
+    font_source_path: str | None = None
+    numeric_format_decoded: bool = False
+    unit_semantics_verified: Literal[False] = False
 
 
 @dataclass(frozen=True)
@@ -204,6 +233,30 @@ def _parse_row(
     )
 
 
+def _decode_record(
+    record: ProductBusinessMetricCandidateRecord,
+    font_decoder: BoundDynamicDigitFont,
+) -> DecodedProductBusinessMetricCandidateRecord:
+    def decode(field: str, *, kind: Literal["COUNT", "DECIMAL"]) -> str | None:
+        candidate = getattr(record.metrics, field)
+        source_value = candidate.source_value
+        if source_value is None:
+            return None
+        return font_decoder.decode(source_value, kind=kind)
+
+    return DecodedProductBusinessMetricCandidateRecord(
+        platform_product_id=record.platform_product_id,
+        metrics=DecodedProductBusinessMetricCandidates(
+            paying_buyer_count=decode("paying_buyer_count", kind="COUNT"),
+            paid_order_count=decode("paid_order_count", kind="COUNT"),
+            paid_goods_quantity=decode("paid_goods_quantity", kind="COUNT"),
+            paid_amount=decode("paid_amount", kind="DECIMAL"),
+            goods_visitor_count=decode("goods_visitor_count", kind="COUNT"),
+            goods_page_view_count=decode("goods_page_view_count", kind="COUNT"),
+        ),
+    )
+
+
 def parse_product_business_list_response(
     raw: bytes,
     *,
@@ -216,8 +269,10 @@ def parse_product_business_list_response(
     """Parse one exact product-business list response without promoting unknown semantics.
 
     The six observed metric values remain source strings with explicit false
-    format/unit flags.  Pagination scalars and the result timestamp are candidates
-    only; this function never calls them coverage or ``source_updated_at``.
+    format/unit flags.  This raw parser never accepts a font decoder.  The
+    fetch-first candidate helper is separate.  Pagination scalars and the
+    result timestamp are candidates only; this function never calls them
+    coverage or ``source_updated_at``.
     """
 
     _require_endpoint(
@@ -271,6 +326,47 @@ def parse_product_business_list_response(
     )
 
 
+def fetch_first_parse_product_business_list_response(
+    raw: bytes,
+    *,
+    font_url: str,
+    request: object,
+    response_path: str,
+    request_method: str,
+    evidence: ProductBusinessYesterdayCandidateEvidence,
+    observed_at: datetime,
+    _font_fetcher: Callable[[str], BoundDynamicDigitFont] = fetch_dynamic_digit_font,
+) -> ParsedProductBusinessResponse:
+    """Fetch the page's dynamic font first, then decode a candidate sidecar.
+
+    ``font_url`` is intended for a future internal page collector, not an MCP
+    parameter.  The raw source candidates remain unchanged, and this helper
+    does not promote numeric decoding into verified business-unit semantics.
+    """
+
+    font_decoder = _font_fetcher(font_url)
+    parsed = parse_product_business_list_response(
+        raw,
+        request=request,
+        response_path=response_path,
+        request_method=request_method,
+        evidence=evidence,
+        observed_at=observed_at,
+    )
+    decoded_records = [_decode_record(record, font_decoder) for record in parsed.records]
+    decoded_any_value = any(
+        value is not None for record in decoded_records for value in vars(record.metrics).values()
+    )
+    return replace(
+        parsed,
+        decoded_records=decoded_records,
+        font_sha256=font_decoder.sha256,
+        font_profile_version=font_decoder.profile_version,
+        font_source_path=font_decoder.source_path,
+        numeric_format_decoded=decoded_any_value,
+    )
+
+
 def parse_product_business_ready_response(
     raw: bytes,
     *,
@@ -300,8 +396,11 @@ __all__ = [
     "PRODUCT_BUSINESS_LIST_PATH",
     "PRODUCT_BUSINESS_READY_PATH",
     "PRODUCT_BUSINESS_SCOPE_VERSION",
+    "DecodedProductBusinessMetricCandidateRecord",
+    "DecodedProductBusinessMetricCandidates",
     "ParsedProductBusinessReadyResponse",
     "ParsedProductBusinessResponse",
+    "fetch_first_parse_product_business_list_response",
     "parse_product_business_list_response",
     "parse_product_business_ready_response",
 ]

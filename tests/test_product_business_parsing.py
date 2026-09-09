@@ -4,6 +4,7 @@ import asyncio
 import json
 from datetime import date, datetime
 from pathlib import Path
+from types import MappingProxyType
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -11,11 +12,14 @@ import pytest
 from conftest import make_repository, write_test_config
 from pydantic import ValidationError
 
+import pdd_data_mcp.browser.product_business_parsing as parsing_module
 import pdd_data_mcp.contracts as contracts
 from pdd_data_mcp.application import PddDataService
+from pdd_data_mcp.browser.dynamic_digit_font import BoundDynamicDigitFont
 from pdd_data_mcp.browser.product_business_parsing import (
     PRODUCT_BUSINESS_LIST_PATH,
     PRODUCT_BUSINESS_READY_PATH,
+    fetch_first_parse_product_business_list_response,
     parse_product_business_list_response,
     parse_product_business_ready_response,
 )
@@ -191,6 +195,169 @@ def test_missing_and_null_metric_strings_stay_null_and_never_become_zero() -> No
     assert metrics.goods_page_view_count.missing_reason == "SOURCE_VALUE_NULL"
     assert metrics.paid_order_count.source_value == "2"
     assert metrics.paid_order_count.missing_reason is None
+
+
+def _bound_font() -> BoundDynamicDigitFont:
+    digits = MappingProxyType(
+        {
+            0xE6EB: "0",
+            0xE378: "1",
+            0xE551: "2",
+            0xE3C1: "3",
+            0xE6EA: "4",
+            0xEBF4: "5",
+            0xE9E5: "6",
+            0xE6B6: "7",
+            0xEF35: "8",
+            0xEFBA: "9",
+        }
+    )
+    return BoundDynamicDigitFont(
+        source_path=(
+            "/webspider-sdk-api/"
+            "11111111111111111111111111111111-22222222222222222222222222222222.ttf"
+        ),
+        sha256="3861d3322b1267200735d9f5cb48bc6d833a75ee3eb468b54f89abe7e0038eb7",
+        profile_version="pdd-digit-font-3861d332-v1",
+        codepoint_to_digit=digits,
+    )
+
+
+def _encoded_row(**changes: object) -> dict[str, object]:
+    values: dict[str, object] = {
+        "payOrdrUsrCnt": "\ue378\ue551",
+        "payOrdrCnt": "\ue3c1\ue6ea",
+        "payOrdrGoodsQty": "\uebf4\ue9e5",
+        "payOrdrAmt": "\ue6b6\uef35.\uefba\ue6eb",
+        "goodsUv": "\ue378\ue6eb\ue6eb",
+        "goodsPv": "\ue551\ue6eb\ue6eb",
+    }
+    values.update(changes)
+    return row(**values)
+
+
+def _parse_with_font(
+    raw: bytes,
+    *,
+    decoder: BoundDynamicDigitFont,
+) -> Any:
+    return fetch_first_parse_product_business_list_response(
+        raw,
+        font_url=(
+            "https://pfile.pddpic.com/webspider-sdk-api/"
+            "11111111111111111111111111111111-22222222222222222222222222222222.ttf"
+        ),
+        request=request(),
+        response_path=PRODUCT_BUSINESS_LIST_PATH,
+        request_method="POST",
+        evidence=evidence(),
+        observed_at=OBSERVED_AT,
+        _font_fetcher=lambda _url: decoder,
+    )
+
+
+def test_optional_bound_font_decodes_candidates_without_relabeling_source_or_units() -> None:
+    decoder = _bound_font()
+    parsed = _parse_with_font(response([_encoded_row()]), decoder=decoder)
+
+    assert parsed.numeric_format_decoded is True
+    assert parsed.unit_semantics_verified is False
+    assert parsed.font_profile_version == "pdd-digit-font-3861d332-v1"
+    assert parsed.decoded_records is not None
+    decoded = parsed.decoded_records[0].metrics
+    assert decoded.paying_buyer_count == "12"
+    assert decoded.paid_order_count == "34"
+    assert decoded.paid_goods_quantity == "56"
+    assert decoded.paid_amount == "78.90"
+    assert decoded.goods_visitor_count == "100"
+    assert decoded.goods_page_view_count == "200"
+    assert parsed.records[0].metrics.paid_amount.source_value == "\ue6b6\uef35.\uefba\ue6eb"
+    assert parsed.records[0].metrics.paid_amount.numeric_format_verified is False
+    assert parsed.records[0].metrics.paid_amount.unit_semantics_verified is False
+
+
+def test_font_decode_rejects_whole_response_on_first_unmapped_pua() -> None:
+    decoder = _bound_font()
+    with pytest.raises(CollectionRejected) as caught:
+        _parse_with_font(
+            response([_encoded_row(), _encoded_row(goods_id=302, goodsPv="\ue777")]),
+            decoder=decoder,
+        )
+
+    assert caught.value.status == "UNIT_UNVERIFIED"
+    assert caught.value.error_code == "DYNAMIC_FONT_CODEPOINT_UNMAPPED"
+
+
+def test_empty_result_does_not_claim_that_any_numeric_value_was_decoded() -> None:
+    parsed = _parse_with_font(response([]), decoder=_bound_font())
+
+    assert parsed.decoded_records == []
+    assert parsed.numeric_format_decoded is False
+
+
+def test_current_font_profile_rejects_values_from_the_prior_rotated_font() -> None:
+    decoder = _bound_font()
+    with pytest.raises(CollectionRejected) as caught:
+        _parse_with_font(
+            response([_encoded_row(goodsUv="\ue809")]),
+            decoder=decoder,
+        )
+
+    assert caught.value.error_code == "DYNAMIC_FONT_CODEPOINT_UNMAPPED"
+
+
+def test_font_fetch_happens_before_response_parse_and_failure_stops_parse(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    events: list[str] = []
+    real_decode_json = parsing_module.decode_json_object
+
+    def tracked_decode_json(raw: bytes) -> dict[str, Any]:
+        events.append("list-parse")
+        return real_decode_json(raw)
+
+    monkeypatch.setattr(parsing_module, "decode_json_object", tracked_decode_json)
+
+    def fetched(_url: str) -> BoundDynamicDigitFont:
+        events.append("font-fetch")
+        return _bound_font()
+
+    fetch_first_parse_product_business_list_response(
+        response([_encoded_row()]),
+        font_url=(
+            "https://pfile.pddpic.com/webspider-sdk-api/"
+            "11111111111111111111111111111111-22222222222222222222222222222222.ttf"
+        ),
+        request=request(),
+        response_path=PRODUCT_BUSINESS_LIST_PATH,
+        request_method="POST",
+        evidence=evidence(),
+        observed_at=OBSERVED_AT,
+        _font_fetcher=fetched,
+    )
+    assert events == ["font-fetch", "list-parse"]
+
+    events.clear()
+
+    def failed_fetch(_url: str) -> BoundDynamicDigitFont:
+        events.append("font-fetch")
+        raise CollectionRejected("UNIT_UNVERIFIED", "DYNAMIC_FONT_FETCH_FAILED")
+
+    with pytest.raises(CollectionRejected, match="DYNAMIC_FONT_FETCH_FAILED"):
+        fetch_first_parse_product_business_list_response(
+            response([_encoded_row()]),
+            font_url=(
+                "https://pfile.pddpic.com/webspider-sdk-api/"
+                "11111111111111111111111111111111-22222222222222222222222222222222.ttf"
+            ),
+            request=request(),
+            response_path=PRODUCT_BUSINESS_LIST_PATH,
+            request_method="POST",
+            evidence=evidence(),
+            observed_at=OBSERVED_AT,
+            _font_fetcher=failed_fetch,
+        )
+    assert events == ["font-fetch"]
 
 
 @pytest.mark.parametrize(
