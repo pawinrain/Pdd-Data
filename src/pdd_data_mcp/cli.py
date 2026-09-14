@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from pdd_data_mcp.application import PddDataService
 from pdd_data_mcp.browser import (
+    AftersaleCdpCollector,
     CoreDataCdpCollector,
     PromotionAccountCdpCollector,
     PromotionMetricsCdpCollector,
@@ -57,6 +58,11 @@ def _service(config: AppConfig, repository: LocalFileSnapshotRepository) -> PddD
                 runtime_root=config.storage.runtime_root,
             ),
             core=CoreDataCdpCollector(
+                connection=connection,
+                collection=config.collection,
+                runtime_root=config.storage.runtime_root,
+            ),
+            aftersale=AftersaleCdpCollector(
                 connection=connection,
                 collection=config.collection,
                 runtime_root=config.storage.runtime_root,

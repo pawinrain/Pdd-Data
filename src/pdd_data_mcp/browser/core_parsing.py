@@ -204,8 +204,15 @@ def _optional_path(item: dict[str, Any], path: str) -> Any | None:
 
 
 def _parse_optional_time(value: Any, code: str) -> datetime | None:
+    from datetime import timezone
     if value is None:
         return None
+    if isinstance(value, int | float):
+        # Unix timestamp
+        try:
+            return datetime.fromtimestamp(value, tz=timezone.utc)
+        except (ValueError, OSError) as exc:
+            raise CollectionRejected("TIME_SCOPE_UNVERIFIED", code) from exc
     if not isinstance(value, str):
         raise CollectionRejected("TIME_SCOPE_UNVERIFIED", code)
     try:
@@ -254,12 +261,17 @@ def parse_product_page_response(
         status: Literal["ON_SALE", "OFF_SALE", "UNKNOWN"] | None = None
         if adapter.status_path:
             status = adapter.status_map.get(str(raw_status), "UNKNOWN")
+        def _extract_price(raw: Any) -> Any:
+            if isinstance(raw, list) and len(raw) > 0:
+                return raw[0]
+            return raw
+
         raw_price = _optional_path(item, adapter.price_path)
         price_cents: int | None = None
         if raw_price is not None:
             price_cents = int(
                 parse_metric_value(
-                    raw_price,
+                    _extract_price(raw_price),
                     StoreMetricSettings(
                         response_path="value",
                         source_unit=adapter.price_unit,
@@ -267,6 +279,47 @@ def parse_product_page_response(
                     ),
                 )
             )
+        raw_market_price = _optional_path(item, adapter.market_price_path)
+        market_price_cents: int | None = None
+        if raw_market_price is not None:
+            market_price_cents = int(
+                parse_metric_value(
+                    _extract_price(raw_market_price),
+                    StoreMetricSettings(
+                        response_path="value",
+                        source_unit=adapter.price_unit,
+                        output_unit="CNY_CENT",
+                    ),
+                )
+            )
+        image_url = None
+        if adapter.image_url_path:
+            raw_image = _optional_path(item, adapter.image_url_path)
+            image_url = None if raw_image is None else str(raw_image)
+        thumb_url = None
+        if adapter.thumb_url_path:
+            raw_thumb = _optional_path(item, adapter.thumb_url_path)
+            thumb_url = None if raw_thumb is None else str(raw_thumb)
+        sold_quantity = None
+        if adapter.sold_quantity_path:
+            raw_sold = _optional_path(item, adapter.sold_quantity_path)
+            sold_quantity = None if raw_sold is None else _parse_non_negative_int(raw_sold, "INVALID_SOLD_QUANTITY")
+        sold_quantity_30d = None
+        if adapter.sold_quantity_30d_path:
+            raw_sold_30d = _optional_path(item, adapter.sold_quantity_30d_path)
+            sold_quantity_30d = None if raw_sold_30d is None else _parse_non_negative_int(raw_sold_30d, "INVALID_SOLD_QUANTITY_30D")
+        fav_cnt = None
+        if adapter.fav_cnt_path:
+            raw_fav = _optional_path(item, adapter.fav_cnt_path)
+            fav_cnt = None if raw_fav is None else _parse_non_negative_int(raw_fav, "INVALID_FAV_CNT")
+        cat_name = None
+        if adapter.cat_name_path:
+            raw_cat = _optional_path(item, adapter.cat_name_path)
+            cat_name = None if raw_cat is None else str(raw_cat)
+        brand_name = None
+        if adapter.brand_name_path:
+            raw_brand = _optional_path(item, adapter.brand_name_path)
+            brand_name = None if raw_brand is None else str(raw_brand)
         raw_sku_count = _optional_path(item, adapter.sku_count_path)
         sku_count = (
             None
@@ -279,6 +332,14 @@ def parse_product_page_response(
                 platform_product_id=product_id,
                 name=name,
                 price_cents=price_cents,
+                market_price_cents=market_price_cents,
+                image_url=image_url,
+                thumb_url=thumb_url,
+                sold_quantity=sold_quantity,
+                sold_quantity_30d=sold_quantity_30d,
+                fav_cnt=fav_cnt,
+                cat_name=cat_name,
+                brand_name=brand_name,
                 status=status,
                 sku_count=sku_count,
                 created_at=_parse_optional_time(

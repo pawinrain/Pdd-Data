@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -26,8 +26,9 @@ from pdd_data_mcp.validation import SnapshotValidator
 
 
 class FakeRequest:
-    def __init__(self, method: str = "GET") -> None:
+    def __init__(self, method: str = "GET", post_data: str | None = None) -> None:
         self.method = method
+        self.post_data = post_data
 
 
 class FakeResponse:
@@ -501,3 +502,186 @@ def test_collector_joins_exact_metric_and_identity_responses(tmp_path: Path) -> 
     assert draft.identity_evidence.response_field_path == "result.mallId"
     assert identity.body_reads == 1
     assert metric.body_reads == 1
+
+
+REPORT_URL = "https://yingxiao.pinduoduo.com/mms-gateway/poseidon/api/report/queryHourlyRangeReport"
+
+
+def _joined_adapter() -> PromotionAdapterSettings:
+    return adapter(
+        response_path="/api/daily-costs",
+        response_method="POST",
+        business_success_path="success",
+        platform_store_id_path="",
+        identity_response_host="127.0.0.1",
+        identity_response_path="/api/user/info",
+        identity_response_method="POST",
+        identity_business_success_path="success",
+        identity_platform_store_id_path="result.mallId",
+        metric_list_path="result",
+        metric_item_business_date_path="date",
+        metric_item_date_format="ISO_DATETIME_SECONDS",
+        business_date_path="",
+        ad_spend_path="dailyCostForHttp.value",
+        ad_spend_unit="CNY",
+        ad_spend_unit_path="dailyCostForHttp.unit",
+        ad_spend_expected_unit_value="YUAN",
+        source_updated_at_path="",
+    )
+
+
+def _daily_cost_response(day: str) -> FakeResponse:
+    return FakeResponse(
+        (
+            '{"success":true,"result":['
+            f'{{"date":"{day} 00:00:00",'
+            '"dailyCostForHttp":{"unit":"YUAN","value":"123.45"}}]}'
+        ).encode(),
+        url="http://127.0.0.1:8765/api/daily-costs",
+        method="POST",
+    )
+
+
+def _identity_response() -> FakeResponse:
+    return FakeResponse(
+        b'{"success":true,"result":{"mallId":1001}}',
+        url="http://127.0.0.1:8765/api/user/info",
+        method="POST",
+    )
+
+
+def _report_response(day: str) -> FakeResponse:
+    body = json.dumps(
+        {
+            "success": True,
+            "result": {
+                "sumReport": {
+                    "spend": {"value": "123.45", "unit": "YUAN", "unitCode": 1},
+                    "orderSpend": {"value": "123.45", "unit": "YUAN", "unitCode": 1},
+                    "gmv": {"value": "600.00", "unit": "YUAN", "unitCode": 1},
+                    "netGmv": {"value": "500.00", "unit": "YUAN", "unitCode": 1},
+                    "orderSpendRoiUnified": {
+                        "value": "4.86",
+                        "unit": "PER_ONE",
+                        "unitCode": 1,
+                    },
+                    "orderSpendNetRoi": {
+                        "value": "4.05",
+                        "unit": "PER_ONE",
+                        "unitCode": 1,
+                    },
+                    "orderNum": 78,
+                    "netOrderNum": 67,
+                    "impression": 1000,
+                    "click": 50,
+                }
+            },
+        }
+    ).encode()
+    return FakeResponse(body, url=REPORT_URL, method="POST")
+
+
+def _report_response_with_post(day: str) -> FakeResponse:
+    response = _report_response(day)
+    response.request = FakeRequest(
+        "POST",
+        json.dumps(
+            {
+                "startDate": f"{day} 00:00:00",
+                "endDate": f"{day} 00:00:00",
+                "blockTypes": [1],
+                "clientType": 1,
+            }
+        ),
+    )
+    return response
+
+
+def test_collector_merges_today_account_report_into_overview(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pdd_data_mcp.browser.promotion as promotion_mod
+
+    monkeypatch.setattr(promotion_mod, "_REPORT_WAIT_SECONDS", 1.0)
+    day = current_day()
+    page = FakePage(
+        "http://127.0.0.1:8765/mains/promotionOverview",
+        {
+            "#store": FakeLocator(None, "1001"),
+            "#business-date": FakeLocator(day),
+            "#ad-spend": FakeLocator("123.45"),
+        },
+    )
+    yesterday = (datetime.now(ZoneInfo("Asia/Shanghai")).date() - timedelta(days=1)).isoformat()
+    yesterday_report = _report_response_with_post(yesterday)
+    today_report = _report_response_with_post(day)
+    page.responses = [
+        _identity_response(),
+        _daily_cost_response(day),
+        yesterday_report,
+        today_report,
+    ]
+    connection = make_connection(_joined_adapter()).model_copy(
+        update={"expected_platform_store_id": "1001"}
+    )
+    draft = asyncio.run(
+        PromotionOverviewCdpCollector(
+            connection=connection,
+            collection=CollectionSettings(collection_timeout_ms=10_000, min_interval_seconds=0),
+            runtime_root=tmp_path,
+            connector=FakeConnector(FakeSession([page])),  # type: ignore[arg-type]
+        ).collect(
+            store_id="st_real",
+            dataset_type=DatasetType.PROMOTION_OVERVIEW,
+            scope=scope(),
+            limit=50,
+        )
+    )
+    metrics = cast(dict[str, Any], cast(dict[str, Any], draft.payload)["metrics"])
+    assert metrics["ad_gmv"]["value"] == 60000
+    assert metrics["roi"]["value"] == "4.86"
+    assert metrics["net_roi"]["value"] == "4.05"
+    assert metrics["order_count"]["value"] == 78
+    assert metrics["click_count"]["value"] == 50
+    assert draft.missing_fields == []
+    assert yesterday_report.body_reads == 0
+    assert today_report.body_reads == 1
+
+
+def test_collector_without_account_report_keeps_gmv_roi_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import pdd_data_mcp.browser.promotion as promotion_mod
+
+    monkeypatch.setattr(promotion_mod, "_REPORT_WAIT_SECONDS", 0.0)
+    day = current_day()
+    page = FakePage(
+        "http://127.0.0.1:8765/mains/promotionOverview",
+        {
+            "#store": FakeLocator(None, "1001"),
+            "#business-date": FakeLocator(day),
+            "#ad-spend": FakeLocator("123.45"),
+        },
+    )
+    page.responses = [_identity_response(), _daily_cost_response(day)]
+    connection = make_connection(_joined_adapter()).model_copy(
+        update={"expected_platform_store_id": "1001"}
+    )
+    draft = asyncio.run(
+        PromotionOverviewCdpCollector(
+            connection=connection,
+            collection=CollectionSettings(collection_timeout_ms=1000, min_interval_seconds=0),
+            runtime_root=tmp_path,
+            connector=FakeConnector(FakeSession([page])),  # type: ignore[arg-type]
+        ).collect(
+            store_id="st_real",
+            dataset_type=DatasetType.PROMOTION_OVERVIEW,
+            scope=scope(),
+            limit=50,
+        )
+    )
+    metrics = cast(dict[str, Any], cast(dict[str, Any], draft.payload)["metrics"])
+    assert metrics["ad_spend"]["value"] == 12345
+    assert metrics["ad_gmv"] is None
+    assert metrics["roi"] is None
+    assert set(draft.missing_fields) == {"ad_gmv", "roi", "net_roi"}

@@ -60,6 +60,11 @@ class CollectionSettings(StrictModel):
     max_mcp_response_bytes: int = Field(default=262_144, ge=4096)
     max_browser_response_bytes: int = Field(default=1_048_576, ge=4096, le=8_388_608)
     max_inflight_responses: int = Field(default=4, ge=1, le=16)
+    # When no matching target tab exists in the connected dedicated Chrome, open a new
+    # tab and navigate to the configured target URL. Still never launches Chrome itself,
+    # never closes tabs, and only navigates to host-allowlisted URLs from local config.
+    auto_open_missing_pages: bool = False
+    page_open_timeout_ms: int = Field(default=15_000, ge=1_000, le=60_000)
 
 
 class DiscoverySettings(StrictModel):
@@ -698,6 +703,9 @@ class StoreOverviewAdapterSettings(CoreAdapterBaseSettings):
     dom_business_date_format: Literal["EXACT_LABEL", "CONTAINS_ISO_DATETIME_SECONDS"] = (
         "EXACT_LABEL"
     )
+    # Optional: MMS header store display name on home / shared chrome shell
+    dom_store_name_selector: str = Field(default="", max_length=512)
+    dom_store_name_attribute: str = Field(default="", max_length=128)
 
     @field_validator("business_date_path")
     @classmethod
@@ -736,6 +744,14 @@ class ProductCatalogAdapterSettings(CoreAdapterBaseSettings):
     )
     price_path: str = Field(default="", max_length=256)
     price_unit: Literal["CNY", "CNY_CENT"] = "CNY_CENT"
+    market_price_path: str = Field(default="", max_length=256)
+    image_url_path: str = Field(default="", max_length=256)
+    thumb_url_path: str = Field(default="", max_length=256)
+    sold_quantity_path: str = Field(default="", max_length=256)
+    sold_quantity_30d_path: str = Field(default="", max_length=256)
+    fav_cnt_path: str = Field(default="", max_length=256)
+    cat_name_path: str = Field(default="", max_length=256)
+    brand_name_path: str = Field(default="", max_length=256)
     sku_count_path: str = Field(default="", max_length=256)
     created_at_path: str = Field(default="", max_length=256)
     published_at_path: str = Field(default="", max_length=256)
@@ -823,6 +839,79 @@ class InventoryAdapterSettings(CoreAdapterBaseSettings):
         return self
 
 
+class AftersaleAdapterSettings(CoreAdapterBaseSettings):
+    """Aftersale/refund list capture (MVP: 待商家处理 quickSearchType=7)."""
+
+    list_path: str = Field(default="", max_length=256)
+    total_path: str = Field(default="", max_length=256)
+    aftersale_id_path: str = Field(default="", max_length=256)
+    order_sn_path: str = Field(default="", max_length=256)
+    aftersale_type_path: str = Field(default="", max_length=256)
+    aftersale_type_name_path: str = Field(default="", max_length=256)
+    aftersale_status_path: str = Field(default="", max_length=256)
+    aftersale_title_path: str = Field(default="", max_length=256)
+    refund_amount_path: str = Field(default="", max_length=256)
+    order_amount_path: str = Field(default="", max_length=256)
+    goods_name_path: str = Field(default="", max_length=256)
+    goods_spec_path: str = Field(default="", max_length=256)
+    goods_number_path: str = Field(default="", max_length=256)
+    reason_desc_path: str = Field(default="", max_length=256)
+    expire_remain_path: str = Field(default="", max_length=256)
+    created_at_path: str = Field(default="", max_length=256)
+    request_page_number_field: str = Field(default="pageNumber", max_length=64)
+    request_page_size_field: str = Field(default="pageSize", max_length=64)
+    request_quick_search_type_field: str = Field(default="quickSearchType", max_length=64)
+    platform_page_size: int = Field(default=10, ge=1, le=100)
+    quick_search_type: int = Field(default=7, ge=0)
+    supported_windows: list[str] = Field(default_factory=lambda: ["POINT_IN_TIME"])
+    pagination_terminal_rule: Literal["SHORT_PAGE"] = "SHORT_PAGE"
+
+    @field_validator(
+        "list_path",
+        "total_path",
+        "aftersale_id_path",
+        "order_sn_path",
+        "aftersale_type_path",
+        "aftersale_type_name_path",
+        "aftersale_status_path",
+        "aftersale_title_path",
+        "refund_amount_path",
+        "order_amount_path",
+        "goods_name_path",
+        "goods_spec_path",
+        "goods_number_path",
+        "reason_desc_path",
+        "expire_remain_path",
+        "created_at_path",
+    )
+    @classmethod
+    def validate_aftersale_paths(cls, value: str) -> str:
+        return PromotionAdapterSettings.validate_json_path(value)
+
+    @model_validator(mode="after")
+    def validate_verified_aftersale(self) -> AftersaleAdapterSettings:
+        if self.verified:
+            if self.data_source != "NETWORK_RESPONSE":
+                raise ValueError("aftersale requires a verified network response")
+            required = {
+                "list_path": self.list_path,
+                "total_path": self.total_path,
+                "aftersale_id_path": self.aftersale_id_path,
+                "order_sn_path": self.order_sn_path,
+                "refund_amount_path": self.refund_amount_path,
+                "created_at_path": self.created_at_path,
+                "response_path": self.response_path,
+                "response_host": self.response_host,
+                "target_page_url": self.target_page_url,
+            }
+            missing = sorted(name for name, value in required.items() if not value)
+            if missing:
+                raise ValueError(f"verified aftersale adapter is missing: {', '.join(missing)}")
+            if "POINT_IN_TIME" not in self.supported_windows:
+                raise ValueError("aftersale MVP requires POINT_IN_TIME window")
+        return self
+
+
 class ConnectionSettings(StrictModel):
     connection_id: InternalId
     store_id: InternalId
@@ -847,6 +936,7 @@ class ConnectionSettings(StrictModel):
         default_factory=ProductCatalogAdapterSettings
     )
     inventory_adapter: InventoryAdapterSettings = Field(default_factory=InventoryAdapterSettings)
+    aftersale_adapter: AftersaleAdapterSettings = Field(default_factory=AftersaleAdapterSettings)
 
     @field_validator("cdp_endpoint", mode="before")
     @classmethod
@@ -899,6 +989,7 @@ class ConnectionSettings(StrictModel):
                 self.store_overview_adapter,
                 self.product_catalog_adapter,
                 self.inventory_adapter,
+                self.aftersale_adapter,
             )
             if not (
                 self.promotion_adapter.verified
@@ -962,6 +1053,7 @@ class AppConfig(StrictModel):
                 connection.store_overview_adapter,
                 connection.product_catalog_adapter,
                 connection.inventory_adapter,
+                connection.aftersale_adapter,
             )
             for adapter in core_adapters:
                 if not (adapter.verified or adapter.discovery.enabled):

@@ -1,6 +1,8 @@
+from pdd_data_mcp.browser.aftersale import AftersaleCdpCollector
 from pdd_data_mcp.browser.cdp import (
     CdpConnector,
     CdpSession,
+    open_missing_page,
     select_page_by_url,
     select_target_page,
 )
@@ -17,6 +19,7 @@ from pdd_data_mcp.browser.promotion_account import PromotionAccountCdpCollector
 from pdd_data_mcp.browser.promotion_metrics import PromotionMetricsCdpCollector
 
 __all__ = [
+    "AftersaleCdpCollector",
     "CdpConnector",
     "CdpSession",
     "CoreDataCdpCollector",
@@ -26,6 +29,7 @@ __all__ = [
     "PromotionMetricsCdpCollector",
     "PromotionOverviewCdpCollector",
     "RealDatasetCollector",
+    "open_missing_page",
     "parse_dom_money",
     "parse_promotion_response",
     "select_page_by_url",

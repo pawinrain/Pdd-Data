@@ -63,6 +63,7 @@ class PddDataService:
             or item.store_overview_adapter.verified
             or item.product_catalog_adapter.verified
             or item.inventory_adapter.verified
+            or item.aftersale_adapter.verified
             for item in real_connections
         )
         real_configured = bool(real_connections)
@@ -101,6 +102,7 @@ class PddDataService:
                     dataset is DatasetType.PRODUCT_CATALOG and item.product_catalog_adapter.verified
                 )
                 or (dataset is DatasetType.INVENTORY and item.inventory_adapter.verified)
+                or (dataset is DatasetType.AFTERSALE_ORDERS and item.aftersale_adapter.verified)
                 for item in real_connections
             )
             if dataset is DatasetType.PROMOTION_OVERVIEW and dataset_available:
@@ -119,6 +121,8 @@ class PddDataService:
                 datasets[dataset.value] = "REAL_PRODUCT_CATALOG"
             elif dataset is DatasetType.INVENTORY and dataset_available:
                 datasets[dataset.value] = "REAL_INVENTORY"
+            elif dataset is DatasetType.AFTERSALE_ORDERS and dataset_available:
+                datasets[dataset.value] = "REAL_AFTERSALE_ORDERS"
             elif (
                 dataset
                 in {
@@ -128,6 +132,7 @@ class PddDataService:
                     DatasetType.STORE_OVERVIEW,
                     DatasetType.PRODUCT_CATALOG,
                     DatasetType.INVENTORY,
+                    DatasetType.AFTERSALE_ORDERS,
                 }
                 and real_configured
             ):
@@ -146,6 +151,7 @@ class PddDataService:
                 DatasetType.PRODUCT_CATALOG: "PRODUCT",
                 DatasetType.INVENTORY: "PRODUCT",
                 DatasetType.ACTIVITY_CATALOG: "UNKNOWN",
+                DatasetType.AFTERSALE_ORDERS: "AFTERSALE_ORDER",
             }[dataset]
             supported_windows: list[WindowKind] = []
             current_only = False
@@ -174,6 +180,14 @@ class PddDataService:
             elif dataset in {DatasetType.PRODUCT_CATALOG, DatasetType.INVENTORY}:
                 supported_windows = [WindowKind.POINT_IN_TIME] if dataset_available else []
                 current_only = True
+            elif dataset is DatasetType.AFTERSALE_ORDERS:
+                supported_windows = [WindowKind.POINT_IN_TIME] if dataset_available else []
+                current_only = True
+                if not dataset_available:
+                    limitation = (
+                        "Configured aftersale adapter present but verified=false until "
+                        "three real collects pass; MVP is 待商家处理 (quickSearchType=7)."
+                    )
             elif dataset is DatasetType.CAMPAIGN_METRICS:
                 limitation = (
                     "A planId association exists, but no campaign-grain metric source is verified."
@@ -258,6 +272,18 @@ class PddDataService:
                     dataset_type=dataset_type,
                     error_code="PRODUCT_BUSINESS_COLLECTION_NOT_ADAPTED",
                 )
+            if dataset_type is DatasetType.AFTERSALE_ORDERS:
+                aftersale = connection.aftersale_adapter
+                if (
+                    not aftersale.verified
+                    or scope.kind.value not in aftersale.supported_windows
+                ):
+                    return CollectResult(
+                        status="DATASET_UNVERIFIED",
+                        committed=False,
+                        dataset_type=dataset_type,
+                        error_code="REAL_DATASET_OR_SCOPE_NOT_ADAPTED",
+                    )
             if dataset_type is DatasetType.PROMOTION_OVERVIEW:
                 account_adapter = connection.promotion_account_adapter
                 account_v3_allowed = (

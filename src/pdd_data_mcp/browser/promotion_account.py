@@ -166,7 +166,7 @@ class PromotionAccountCdpCollector:
             adapter=adapter,
             current_date=reference_local.date(),
         )
-        self._enforce_min_interval()
+        self._enforce_min_interval(dataset_type, scope.version)
         started_at = utc_now()
         session = await self.connector.connect(self.connection, self.collection.connect_timeout_ms)
         try:
@@ -328,6 +328,9 @@ class PromotionAccountCdpCollector:
             captcha_selector=adapter.captcha_selector,
             error_selector=adapter.error_selector,
             page_code="PROMOTION_ACCOUNT_PAGE",
+            auto_open=self.collection.auto_open_missing_pages,
+            open_timeout_ms=self.collection.page_open_timeout_ms,
+            require_clean_url=True,
         )
         parsed = urlsplit(page.url)
         if (
@@ -886,10 +889,16 @@ class PromotionAccountCdpCollector:
             response_field_path=adapter.identity_platform_store_id_path,
         )
 
-    def _enforce_min_interval(self) -> None:
+    def _enforce_min_interval(self, dataset_type: DatasetType, scope_version: str | None) -> None:
+        # Per connection+dataset+version: the v3 account route must not share a throttle
+        # key with Stage C overview or the promoted-product routes collected in the same sync.
         directory = safe_child(self.runtime_root, "rate_limits")
         directory.mkdir(parents=True, exist_ok=True)
-        path = safe_child(directory, f"{self.connection.connection_id}.json")
+        version_part = (scope_version or "none").replace("/", "_").replace("+", "-")
+        path = safe_child(
+            directory,
+            f"{self.connection.connection_id}__{dataset_type.value}__{version_part}.json",
+        )
         now = utc_now()
         if path.exists():
             try:

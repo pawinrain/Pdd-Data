@@ -3,6 +3,7 @@ from __future__ import annotations
 from pdd_data_mcp.browser.core import CoreDataCdpCollector
 from pdd_data_mcp.browser.promotion import PromotionOverviewCdpCollector
 from pdd_data_mcp.browser.promotion_account import PromotionAccountCdpCollector
+from pdd_data_mcp.browser.aftersale import AftersaleCdpCollector
 from pdd_data_mcp.browser.promotion_metrics import PromotionMetricsCdpCollector
 from pdd_data_mcp.contracts.models import DatasetType, Scope, SnapshotDraft
 from pdd_data_mcp.errors import CollectionRejected
@@ -16,11 +17,13 @@ class RealDatasetCollector:
         promotion_account: PromotionAccountCdpCollector,
         promotion_metrics: PromotionMetricsCdpCollector,
         core: CoreDataCdpCollector,
+        aftersale: AftersaleCdpCollector,
     ) -> None:
         self.promotion = promotion
         self.promotion_account = promotion_account
         self.promotion_metrics = promotion_metrics
         self.core = core
+        self.aftersale = aftersale
 
     async def collect(
         self,
@@ -68,6 +71,14 @@ class RealDatasetCollector:
             DatasetType.INVENTORY,
         }:
             return await self.core.collect(
+                store_id=store_id,
+                dataset_type=dataset_type,
+                scope=scope,
+                limit=limit,
+                batch_id=batch_id,
+            )
+        if dataset_type is DatasetType.AFTERSALE_ORDERS:
+            return await self.aftersale.collect(
                 store_id=store_id,
                 dataset_type=dataset_type,
                 scope=scope,

@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 from pdd_data_mcp.contracts.models import (
     DatasetType,
+    AftersaleOrderRecord,
     InventoryRecord,
     ProductCatalogRecord,
     PromotedProductMetricRecord,
@@ -41,6 +42,7 @@ class SnapshotValidator:
                 DatasetType.STORE_OVERVIEW,
                 DatasetType.PRODUCT_CATALOG,
                 DatasetType.INVENTORY,
+                DatasetType.AFTERSALE_ORDERS,
             }
             if draft.dataset_type not in adapted:
                 errors.append("REAL_DATASET_NOT_ADAPTED")
@@ -48,6 +50,7 @@ class SnapshotValidator:
                 DatasetType.STORE_OVERVIEW: {"TODAY"},
                 DatasetType.PRODUCT_CATALOG: {"POINT_IN_TIME"},
                 DatasetType.INVENTORY: {"POINT_IN_TIME"},
+                DatasetType.AFTERSALE_ORDERS: {"POINT_IN_TIME"},
                 DatasetType.PROMOTION_CONFIGURATION: {"POINT_IN_TIME"},
                 DatasetType.PROMOTION_OVERVIEW: {
                     "TODAY",
@@ -90,6 +93,7 @@ class SnapshotValidator:
                 DatasetType.PRODUCT_CATALOG,
                 DatasetType.INVENTORY,
                 DatasetType.PROMOTION_CONFIGURATION,
+                DatasetType.AFTERSALE_ORDERS,
             }:
                 if draft.metric_window is not None:
                     errors.append("POINT_IN_TIME_DATASET_MUST_NOT_HAVE_METRIC_WINDOW")
@@ -336,6 +340,18 @@ class SnapshotValidator:
                 for item in inventory_records
             ):
                 raise ValidationFailure("real inventory requires matching platform_product_id")
+        elif draft.dataset_type is DatasetType.AFTERSALE_ORDERS:
+            if not isinstance(payload, list):
+                raise ValidationFailure("aftersale_orders requires records")
+            records = [
+                AftersaleOrderRecord.model_validate_json(canonical_json(item)) for item in payload
+            ]
+            keys = {item.aftersale_id for item in records}
+            if len(keys) != len(records):
+                raise ValidationFailure("duplicate aftersale_id")
+            order_keys = {(item.aftersale_id, item.order_sn) for item in records}
+            if len(order_keys) != len(records):
+                raise ValidationFailure("duplicate aftersale order pairing")
         elif draft.dataset_type is DatasetType.PRODUCT_METRICS:
             if not isinstance(payload, list):
                 raise ValidationFailure("product_metrics requires records")

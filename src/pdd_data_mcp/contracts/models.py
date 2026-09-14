@@ -42,6 +42,7 @@ class DatasetType(StrEnum):
     CAMPAIGN_METRICS = "campaign_metrics"
     PROMOTION_CONFIGURATION = "promotion_configuration"
     ACTIVITY_CATALOG = "activity_catalog"
+    AFTERSALE_ORDERS = "aftersale_orders"
 
 
 SUPPORTED_SYNTHETIC_DATASETS = frozenset(
@@ -212,8 +213,37 @@ class MetricValue(StrictModel):
         return checked
 
 
+class StoreTrendPoint(StrictModel):
+    """One chart point for MMS home realtime panel (hour key or ISO date)."""
+
+    key: str = Field(min_length=1, max_length=32)
+    gmv_cents: int | None = Field(default=None, ge=0)
+    order_count: int | None = Field(default=None, ge=0)
+    visitor_count: int | None = Field(default=None, ge=0)
+    page_view_count: int | None = Field(default=None, ge=0)
+    review_count: int | None = Field(default=None, ge=0)
+    ad_spend_cents: int | None = Field(default=None, ge=0)
+
+
+class StoreChartTrend(StrictModel):
+    """Optional MMS homePageOverView trend block attached to store_overview."""
+
+    source_path: str = Field(
+        default="/sydney/api/mallCoreData/homePageOverView",
+        max_length=256,
+    )
+    today: list[StoreTrendPoint] = Field(default_factory=list)
+    yesterday: list[StoreTrendPoint] = Field(default_factory=list)
+    week7: list[StoreTrendPoint] = Field(default_factory=list)
+    month30: list[StoreTrendPoint] = Field(default_factory=list)
+
+
 class StoreOverviewPayload(StrictModel):
     metrics: dict[str, MetricValue | None]
+    """Optional mall display name scraped from MMS chrome (e.g. header .user-name-name)."""
+    store_name: str | None = None
+    """Optional realtime chart trend from homePageOverView (best-effort)."""
+    chart_trend: StoreChartTrend | None = None
 
 
 class PromotionOverviewPayload(StrictModel):
@@ -567,12 +597,80 @@ class ProductBusinessMetricCandidateRecord(StrictModel):
         return checked
 
 
+
+AftersaleOrderField = Literal[
+    "refund_amount_cents",
+    "order_amount_cents",
+    "goods_name",
+    "goods_spec",
+    "goods_number",
+    "reason_desc",
+    "expire_remain_seconds",
+    "aftersale_title",
+]
+
+
+class AftersaleOrderRecord(StrictModel):
+    """One MMS aftersale list row (待商家处理售后 MVP)."""
+
+    entity_granularity: Literal["AFTERSALE_ORDER"] = "AFTERSALE_ORDER"
+    aftersale_id: PlatformEntityId
+    order_sn: PlatformEntityId
+    aftersale_type: int | None = Field(default=None, ge=0)
+    aftersale_type_name: str | None = Field(default=None, max_length=128)
+    aftersale_status: int | None = Field(default=None, ge=0)
+    aftersale_title: str | None = Field(default=None, max_length=256)
+    refund_amount_cents: int | None = Field(default=None, ge=0)
+    order_amount_cents: int | None = Field(default=None, ge=0)
+    goods_name: str | None = Field(default=None, max_length=512)
+    goods_spec: str | None = Field(default=None, max_length=256)
+    goods_number: int | None = Field(default=None, ge=0)
+    reason_desc: str | None = Field(default=None, max_length=256)
+    expire_remain_seconds: int | None = Field(default=None, ge=0)
+    created_at: datetime
+    observed_at: datetime
+    missing_reasons: dict[AftersaleOrderField, MissingReason] = Field(default_factory=dict)
+
+    @field_validator("created_at", "observed_at")
+    @classmethod
+    def validate_aftersale_times(cls, value: datetime) -> datetime:
+        checked = _aware(value, "aftersale datetime")
+        assert checked is not None
+        return checked
+
+    @model_validator(mode="after")
+    def validate_missing_reasons(self) -> AftersaleOrderRecord:
+        fields: tuple[AftersaleOrderField, ...] = (
+            "refund_amount_cents",
+            "order_amount_cents",
+            "goods_name",
+            "goods_spec",
+            "goods_number",
+            "reason_desc",
+            "expire_remain_seconds",
+            "aftersale_title",
+        )
+        missing = {field for field in fields if getattr(self, field) is None}
+        reasons = set(self.missing_reasons)
+        if missing != reasons:
+            raise ValueError("missing_reasons must describe exactly the null aftersale fields")
+        return self
+
+
 class ProductCatalogRecord(StrictModel):
     product_id: InternalId
     platform_product_id: str | None = Field(default=None, min_length=1, max_length=128)
     sku_id: InternalId | None = None
     name: str | None = Field(default=None, max_length=512)
     price_cents: int | None = Field(default=None, ge=0)
+    market_price_cents: int | None = Field(default=None, ge=0)
+    image_url: str | None = Field(default=None, max_length=1024)
+    thumb_url: str | None = Field(default=None, max_length=1024)
+    sold_quantity: int | None = Field(default=None, ge=0)
+    sold_quantity_30d: int | None = Field(default=None, ge=0)
+    fav_cnt: int | None = Field(default=None, ge=0)
+    cat_name: str | None = Field(default=None, max_length=256)
+    brand_name: str | None = Field(default=None, max_length=256)
     status: Literal["ON_SALE", "OFF_SALE", "UNKNOWN"] | None = None
     sku_count: int | None = Field(default=None, ge=0)
     created_at: datetime | None = None
@@ -839,6 +937,7 @@ DatasetCapabilityStatus = Literal[
     "REAL_STORE_TODAY",
     "REAL_PRODUCT_CATALOG",
     "REAL_INVENTORY",
+    "REAL_AFTERSALE_ORDERS",
     "CONFIGURED_NOT_VERIFIED",
     "UNAVAILABLE",
 ]
@@ -848,7 +947,7 @@ class DatasetCapabilityDetail(StrictModel):
     status: DatasetCapabilityStatus
     supported_window_kinds: list[WindowKind] = Field(default_factory=list)
     entity_granularity: Literal[
-        "STORE", "ACCOUNT", "CAMPAIGN", "PROMOTED_PRODUCT", "PRODUCT", "SKU", "UNKNOWN"
+        "STORE", "ACCOUNT", "CAMPAIGN", "PROMOTED_PRODUCT", "PRODUCT", "SKU", "AFTERSALE_ORDER", "UNKNOWN"
     ]
     current_only: bool = False
     verified: bool = False

@@ -25,6 +25,11 @@ platform_auto_retries = 0
 max_mcp_response_bytes = 262144
 max_browser_response_bytes = 1048576
 max_inflight_responses = 4
+# When the configured target tab is missing in the connected dedicated Chrome, open a
+# new tab and navigate to the configured target URL. Still never launches Chrome itself,
+# never closes tabs, and never accepts a URL through MCP parameters.
+auto_open_missing_pages = false
+page_open_timeout_ms = 15000
 
 [[connections]]
 connection_id = "conn_pdd_promotion_01"

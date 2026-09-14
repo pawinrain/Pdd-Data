@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import uuid
-from datetime import datetime, time
+from datetime import date, datetime, time
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal
@@ -23,6 +24,7 @@ from pdd_data_mcp.browser.parsing import (
     parse_promotion_response,
     verify_store_identity,
 )
+from pdd_data_mcp.browser.promotion_metrics_parsing import parse_report_effect_metrics
 from pdd_data_mcp.config import CollectionSettings, ConnectionSettings
 from pdd_data_mcp.contracts.models import (
     Coverage,
@@ -31,6 +33,7 @@ from pdd_data_mcp.contracts.models import (
     IdentityEvidence,
     MetricValue,
     MetricWindow,
+    PromotedProductEffectMetrics,
     PromotionOverviewPayload,
     Quality,
     Scope,
@@ -40,6 +43,16 @@ from pdd_data_mcp.contracts.models import (
 from pdd_data_mcp.errors import CollectionRejected
 from pdd_data_mcp.security import safe_child
 from pdd_data_mcp.utils import canonical_json, scope_key, utc_now
+
+LOGGER = logging.getLogger("pdd_data_mcp.browser")
+
+# Account-level report backing the promotion overview page cards (spend/gmv/ROI
+# across ALL promotion blocks). Distinct from the goods-promotion v3/list endpoint
+# (blockType=3), which only covers goods promotion products.
+_REPORT_HOST = "yingxiao.pinduoduo.com"
+_REPORT_PATH = "/mms-gateway/poseidon/api/report/queryHourlyRangeReport"
+_REPORT_BLOCK_TYPES = (1,)
+_REPORT_WAIT_SECONDS = 8.0
 
 _PATH_ID = re.compile(
     r"(?:\d{4,}|[0-9a-fA-F]{8}-[0-9a-fA-F-]{27,}|(?=[A-Za-z0-9_-]{16,}$)(?=.*\d)[A-Za-z0-9_-]+)"
@@ -138,17 +151,23 @@ class PromotionOverviewCdpCollector:
         zone = ZoneInfo(scope.timezone)
         if utc_now().astimezone(zone).date() != scope.business_date:
             raise CollectionRejected("TIME_SCOPE_UNVERIFIED", "TODAY_BUSINESS_DATE_IS_NOT_CURRENT")
-        self._enforce_min_interval()
+        self._enforce_min_interval(dataset_type, scope.version)
         started_at = utc_now()
         session = await self.connector.connect(self.connection, self.collection.connect_timeout_ms)
         try:
             page = await select_target_page(
-                session.browser, self.connection, self.connection.promotion_adapter
+                session.browser,
+                self.connection,
+                self.connection.promotion_adapter,
+                auto_open=self.collection.auto_open_missing_pages,
+                open_timeout_ms=self.collection.page_open_timeout_ms,
             )
             if not self.connection.promotion_adapter.verified:
                 await self._discover(page)
             try:
-                network, captured_at = await self._capture_verified_response(page, scope)
+                network, captured_at, report_raw = await self._capture_verified_response(
+                    page, scope
+                )
             except CollectionRejected as exc:
                 if (
                     exc.status != "CAPTURE_TIMEOUT"
@@ -172,10 +191,12 @@ class PromotionOverviewCdpCollector:
                     capture_method="DOM",
                     observed_platform_store_id=dom_store_id,
                     source_updated_at=None,
+                    report_metrics=None,
                 )
             _, dom_money = await self._read_dom(page, scope, require_store_id=False)
             if not dom_money.matches(network.ad_spend_cents):
                 raise CollectionRejected("DATA_MISMATCH", "NETWORK_DOM_AD_SPEND_MISMATCH")
+            report_metrics = self._parse_account_report(report_raw, scope.business_date)
             return self._build_draft(
                 store_id=store_id,
                 batch_id=batch_id,
@@ -190,6 +211,7 @@ class PromotionOverviewCdpCollector:
                 capture_method="NETWORK_RESPONSE",
                 observed_platform_store_id=network.platform_store_id,
                 source_updated_at=network.source_updated_at,
+                report_metrics=report_metrics,
             )
         finally:
             await session.disconnect()
@@ -207,25 +229,93 @@ class PromotionOverviewCdpCollector:
         captured_at: datetime,
         ad_spend_cents: int,
         precision: Literal["EXACT", "APPROXIMATE"],
-        capture_method: Literal["NETWORK_RESPONSE", "DOM"],
+        capture_method: Literal["NETWORK_RESPONSE", "DOM", "MIXED"],
         observed_platform_store_id: str,
         source_updated_at: datetime | None,
+        report_metrics: PromotedProductEffectMetrics | None = None,
     ) -> SnapshotDraft:
         adapter = self.connection.promotion_adapter
         zone = ZoneInfo(scope.timezone)
         local_midnight = datetime.combine(scope.business_date, time.min, tzinfo=zone)
-        payload = PromotionOverviewPayload(
-            metrics={
-                "ad_spend": MetricValue(
-                    value=ad_spend_cents,
-                    unit="CNY_CENT",
-                    observed_at=captured_at,
-                    capture_method=capture_method,
-                    precision=precision,
-                ),
-                "ad_gmv": None,
-                "roi": None,
-            }
+
+        def money_metric(value: int | None) -> MetricValue | None:
+            if value is None:
+                return None
+            return MetricValue(
+                value=value,
+                unit="CNY_CENT",
+                observed_at=captured_at,
+                capture_method="NETWORK_RESPONSE",
+                precision="EXACT",
+            )
+
+        def ratio_metric(value: str | None) -> MetricValue | None:
+            if value is None:
+                return None
+            return MetricValue(
+                value=value,
+                unit="RATIO",
+                observed_at=captured_at,
+                capture_method="NETWORK_RESPONSE",
+                precision="EXACT",
+            )
+
+        def count_metric(value: int | None) -> MetricValue | None:
+            if value is None:
+                return None
+            return MetricValue(
+                value=value,
+                unit="COUNT",
+                observed_at=captured_at,
+                capture_method="NETWORK_RESPONSE",
+                precision="EXACT",
+            )
+
+        report = report_metrics
+        net_roi_value = (
+            report.order_spend_net_roi
+            if report is not None and report.order_spend_net_roi
+            else report.settlement_roi
+            if report is not None
+            else None
+        )
+        metrics: dict[str, MetricValue | None] = {
+            "ad_spend": MetricValue(
+                value=ad_spend_cents,
+                unit="CNY_CENT",
+                observed_at=captured_at,
+                capture_method=capture_method if capture_method != "MIXED" else "MIXED",
+                precision=precision,
+            ),
+            "ad_gmv": money_metric(report.gmv_cents if report else None),
+            "roi": ratio_metric(report.order_spend_roi if report else None),
+            "net_roi": ratio_metric(net_roi_value),
+            "net_gmv": money_metric(report.net_gmv_cents if report else None),
+            "order_count": count_metric(report.order_count if report else None),
+            "net_order_count": count_metric(report.net_order_count if report else None),
+            "impression_count": count_metric(report.impression_count if report else None),
+            "click_count": count_metric(report.click_count if report else None),
+        }
+        payload = PromotionOverviewPayload(metrics=metrics)
+        missing_fields = [name for name in ("ad_gmv", "roi", "net_roi") if metrics[name] is None]
+        field_sources: dict[str, Literal["NETWORK_RESPONSE", "DOM"]] = {
+            "metrics.ad_spend": "NETWORK_RESPONSE" if capture_method != "DOM" else "DOM",
+        }
+        if report is not None:
+            for name in (
+                "ad_gmv",
+                "roi",
+                "net_roi",
+                "net_gmv",
+                "order_count",
+                "net_order_count",
+                "impression_count",
+                "click_count",
+            ):
+                if metrics[name] is not None:
+                    field_sources[f"metrics.{name}"] = "NETWORK_RESPONSE"
+        effective_capture_method: Literal["NETWORK_RESPONSE", "DOM", "MIXED"] = (
+            "MIXED" if capture_method == "DOM" and report is not None else capture_method
         )
         return SnapshotDraft(
             batch_id=batch_id,
@@ -247,7 +337,7 @@ class PromotionOverviewCdpCollector:
             ),
             source_updated_at=source_updated_at,
             source="PDD_BROWSER_CDP",
-            capture_method=capture_method,
+            capture_method=effective_capture_method,
             parser_version=adapter.parser_version,
             identity_evidence=IdentityEvidence(
                 expected_platform_store_id=(
@@ -255,7 +345,7 @@ class PromotionOverviewCdpCollector:
                     or f"sha256:{self.connection.expected_platform_store_id_sha256}"
                 ),
                 observed_platform_store_id=observed_platform_store_id,
-                evidence_source=capture_method,
+                evidence_source="DOM" if capture_method == "DOM" else "NETWORK_RESPONSE",
                 independent_verification_method=adapter.identity_verification_method,
                 independent_verification_reference=(
                     adapter.identity_verification_reference or None
@@ -266,15 +356,15 @@ class PromotionOverviewCdpCollector:
                         if adapter.identity_response_path
                         else adapter.platform_store_id_path
                     )
-                    if capture_method == "NETWORK_RESPONSE"
+                    if capture_method in ("NETWORK_RESPONSE", "MIXED")
                     else None
                 ),
                 dom_selector=adapter.dom_store_id_selector or None,
                 dom_attribute=adapter.dom_store_id_attribute or None,
             ),
-            field_sources={"metrics.ad_spend": capture_method},
+            field_sources=field_sources,
             payload=payload.model_dump(mode="json"),
-            missing_fields=["ad_gmv", "roi"],
+            missing_fields=missing_fields,
             quality=Quality(
                 status="VALID",
                 identity="MATCHED",
@@ -291,10 +381,16 @@ class PromotionOverviewCdpCollector:
             ),
         )
 
-    def _enforce_min_interval(self) -> None:
+    def _enforce_min_interval(self, dataset_type: DatasetType, scope_version: str | None) -> None:
+        # Per connection+dataset+version so different promotion datasets/versions can be
+        # collected back-to-back during one user-initiated sync.
         directory = safe_child(self.runtime_root, "rate_limits")
         directory.mkdir(parents=True, exist_ok=True)
-        path = safe_child(directory, f"{self.connection.connection_id}.json")
+        version_part = (scope_version or "none").replace("/", "_").replace("+", "-")
+        path = safe_child(
+            directory,
+            f"{self.connection.connection_id}__{dataset_type.value}__{version_part}.json",
+        )
         now = utc_now()
         if path.exists():
             try:
@@ -458,7 +554,9 @@ class PromotionOverviewCdpCollector:
             and content_type == "application/json"
         )
 
-    def _response_kind(self, response: Response) -> Literal["metric", "identity"] | None:
+    def _response_kind(
+        self, response: Response, expected_date: date
+    ) -> Literal["metric", "identity", "report"] | None:
         adapter = self.connection.promotion_adapter
         if self._matches_response(
             response,
@@ -476,24 +574,62 @@ class PromotionOverviewCdpCollector:
             status=adapter.identity_response_http_status,
         ):
             return "identity"
+        if self._matches_response(
+            response,
+            host=_REPORT_HOST,
+            path=_REPORT_PATH,
+            method="POST",
+            status=200,
+        ) and self._report_request_matches_today(response, expected_date):
+            return "report"
         return None
+
+    def _report_request_matches_today(self, response: Response, expected_date: date) -> bool:
+        try:
+            body = json.loads(response.request.post_data or "{}")
+        except (TypeError, ValueError):
+            return False
+        if not isinstance(body, dict):
+            return False
+        day = expected_date.isoformat()
+        start = body.get("startDate")
+        end = body.get("endDate")
+        if not isinstance(start, str) or not isinstance(end, str):
+            return False
+        if not (start.startswith(day) and end.startswith(day)):
+            return False
+        block_types = body.get("blockTypes")
+        if not isinstance(block_types, list):
+            return False
+        try:
+            return [int(value) for value in block_types] == list(_REPORT_BLOCK_TYPES)
+        except (TypeError, ValueError):
+            return False
 
     async def _capture_verified_response(
         self, page: Page, scope: Scope
-    ) -> tuple[ParsedPromotionResponse, datetime]:
+    ) -> tuple[ParsedPromotionResponse, datetime, bytes | None]:
         loop = asyncio.get_running_loop()
         future: asyncio.Future[tuple[ParsedPromotionResponse, datetime]] = loop.create_future()
         tasks: set[asyncio.Task[None]] = set()
         bodies: dict[str, bytes] = {}
         active = True
 
-        async def consume(response: Response, kind: Literal["metric", "identity"]) -> None:
-            if future.done() or not active:
+        async def consume(
+            response: Response, kind: Literal["metric", "identity", "report"]
+        ) -> None:
+            if not active:
                 return
             try:
                 raw = await response.body()
                 if len(raw) > self.collection.max_browser_response_bytes:
                     raise CollectionRejected("PLATFORM_ERROR", "BROWSER_RESPONSE_TOO_LARGE")
+                if kind == "report":
+                    # Best-effort account report; never fails ad-spend collection.
+                    bodies.setdefault("report", raw)
+                    return
+                if future.done():
+                    return
                 bodies.setdefault(kind, raw)
                 adapter = self.connection.promotion_adapter
                 if "metric" not in bodies or (
@@ -512,18 +648,22 @@ class PromotionOverviewCdpCollector:
                 if not future.done() and active:
                     future.set_result(result)
             except Exception as exc:
+                if kind == "report":
+                    LOGGER.info("promotion_overview: report capture failed: %r", exc)
+                    return
                 if not future.done() and active:
                     future.set_exception(exc)
 
         def on_response(response: Response) -> None:
-            kind = self._response_kind(response)
+            kind = self._response_kind(response, scope.business_date)
             if (
                 not active
-                or future.done()
                 or kind is None
                 or kind in bodies
                 or len(tasks) >= self.collection.max_inflight_responses
             ):
+                return
+            if future.done() and kind != "report":
                 return
             task = asyncio.create_task(consume(response, kind))
             tasks.add(task)
@@ -538,11 +678,20 @@ class PromotionOverviewCdpCollector:
                     timeout=self.collection.collection_timeout_ms,
                 )
             try:
-                return await asyncio.wait_for(
+                parsed, captured_at = await asyncio.wait_for(
                     future, timeout=self.collection.collection_timeout_ms / 1000
                 )
             except TimeoutError as exc:
                 raise CollectionRejected("CAPTURE_TIMEOUT", "VERIFIED_RESPONSE_TIMEOUT") from exc
+            # Account report usually lands in the same reload burst; give it a short window.
+            timeout_seconds = self.collection.collection_timeout_ms / 1000
+            report_wait = min(_REPORT_WAIT_SECONDS, max(0.0, timeout_seconds - 1.0))
+            report_deadline = loop.time() + report_wait
+            while "report" not in bodies and loop.time() < report_deadline:
+                await asyncio.sleep(0.25)
+            if tasks:
+                await asyncio.wait(tasks, timeout=2)
+            return parsed, captured_at, bodies.get("report")
         finally:
             active = False
             page.remove_listener("response", on_response)
@@ -551,6 +700,40 @@ class PromotionOverviewCdpCollector:
                 for task in pending:
                     task.cancel()
                 await asyncio.gather(*pending, return_exceptions=True)
+
+    def _parse_account_report(
+        self, raw: bytes | None, expected_date: date
+    ) -> PromotedProductEffectMetrics | None:
+        if raw is None:
+            return None
+        try:
+            payload = decode_json_object(raw)
+            if payload.get("success") is not True:
+                raise CollectionRejected("PLATFORM_ERROR", "BUSINESS_RESPONSE_NOT_SUCCESS")
+            result = payload.get("result")
+            if not isinstance(result, dict):
+                raise CollectionRejected("PLATFORM_ERROR", "PROMOTION_REPORT_RESULT_NOT_OBJECT")
+            summary = result.get("sumReport")
+            if not isinstance(summary, dict):
+                raise CollectionRejected("PLATFORM_ERROR", "PROMOTION_REPORT_SUMMARY_MISSING")
+            metrics = parse_report_effect_metrics(summary)
+            if all(
+                value is None
+                for value in (
+                    metrics.gmv_cents,
+                    metrics.order_spend_roi,
+                    metrics.order_spend_net_roi,
+                )
+            ):
+                raise CollectionRejected("PLATFORM_ERROR", "PROMOTION_REPORT_SUMMARY_EMPTY")
+            return metrics
+        except CollectionRejected as exc:
+            LOGGER.info(
+                "promotion_overview: account report unusable for %s: %r",
+                expected_date.isoformat(),
+                exc,
+            )
+            return None
 
     async def _read_dom(
         self, page: Page, scope: Scope, *, require_store_id: bool

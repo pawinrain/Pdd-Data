@@ -634,11 +634,13 @@ def test_request_extra_key_and_page_query_are_rejected(tmp_path: Path) -> None:
         collect(instance, DatasetType.PRODUCT_METRICS, WindowKind.TODAY)
     assert caught.value.error_code == "PROMOTION_REQUEST_FILTERS_UNVERIFIED"
 
+    # 带 query 的残留标签页不再被复用：直接按"找不到干净的目标页面"失败，
+    # 而不是先匹配到它、再被 URL 断言拒绝（后者会让每次同步都必然失败）。
     instance, page, session, _ = make_collector(tmp_path / "query", [])
     page.url = f"{PAGE_URL}?keyword=hidden"
     with pytest.raises(CollectionRejected) as caught:
         collect(instance, DatasetType.PRODUCT_METRICS, WindowKind.TODAY)
-    assert caught.value.error_code == "PROMOTION_PAGE_SCOPE_UNVERIFIED"
+    assert caught.value.error_code == "PROMOTION_METRICS_PAGE_NOT_FOUND"
     assert session.disconnected
 
 

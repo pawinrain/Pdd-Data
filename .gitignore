@@ -18,3 +18,4 @@ stage-d-real-runtime/
 config/*.local.toml
 examples/demo-output/
 logs/
+.DS_Store

@@ -3,10 +3,12 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import uuid
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from datetime import datetime, time, timedelta
 from pathlib import Path
 from typing import Literal
@@ -28,6 +30,10 @@ from pdd_data_mcp.browser.core_parsing import (
 )
 from pdd_data_mcp.browser.parsing import decode_json_object, parse_dom_money
 from pdd_data_mcp.browser.promotion import sanitize_discovery_path, sanitized_json_shape
+from pdd_data_mcp.browser.store_chart_trend import (
+    HOME_PAGE_OVERVIEW_PATH,
+    parse_home_page_overview,
+)
 from pdd_data_mcp.config import (
     CollectionSettings,
     ConnectionSettings,
@@ -47,12 +53,15 @@ from pdd_data_mcp.contracts.models import (
     Quality,
     Scope,
     SnapshotDraft,
+    StoreChartTrend,
     StoreOverviewPayload,
     WindowKind,
 )
 from pdd_data_mcp.errors import CollectionRejected
 from pdd_data_mcp.security import safe_child
 from pdd_data_mcp.utils import canonical_json, scope_key, utc_now
+
+LOGGER = logging.getLogger("pdd_data_mcp.browser")
 
 type CoreAdapter = (
     StoreOverviewAdapterSettings | ProductCatalogAdapterSettings | InventoryAdapterSettings
@@ -90,7 +99,7 @@ class CoreDataCdpCollector:
         self._validate_request(store_id, dataset_type, scope)
         if not adapter.verified and not adapter.discovery.enabled:
             raise CollectionRejected("ADAPTER_UNVERIFIED", "CORE_ADAPTER_NOT_VERIFIED")
-        self._enforce_min_interval()
+        self._enforce_min_interval(dataset_type)
         requested_at = utc_now()
         started_at = utc_now()
         session = await self.connector.connect(self.connection, self.collection.connect_timeout_ms)
@@ -102,6 +111,8 @@ class CoreDataCdpCollector:
                 captcha_selector=adapter.captcha_selector,
                 error_selector=adapter.error_selector,
                 page_code=dataset_type.value.upper(),
+                auto_open=self.collection.auto_open_missing_pages,
+                open_timeout_ms=self.collection.page_open_timeout_ms,
             )
             if not adapter.verified:
                 await self._discover(page, adapter, dataset_type)
@@ -173,10 +184,14 @@ class CoreDataCdpCollector:
                 "TIME_SCOPE_UNVERIFIED", f"{dataset_type.value}_SCOPE_UNSUPPORTED"
             )
 
-    def _enforce_min_interval(self) -> None:
+    def _enforce_min_interval(self, dataset_type: DatasetType) -> None:
+        """Throttle per connection+dataset; lets catalog then inventory sync back to back."""
         directory = safe_child(self.runtime_root, "rate_limits")
         directory.mkdir(parents=True, exist_ok=True)
-        path = safe_child(directory, f"{self.connection.connection_id}.json")
+        path = safe_child(
+            directory,
+            f"{self.connection.connection_id}__{dataset_type.value}.json",
+        )
         now = utc_now()
         if path.exists():
             try:
@@ -207,6 +222,8 @@ class CoreDataCdpCollector:
             browser,
             adapter.identity_page_url,
             page_code="MERCHANT_IDENTITY_PAGE",
+            auto_open=self.collection.auto_open_missing_pages,
+            open_timeout_ms=self.collection.page_open_timeout_ms,
         )
         text = await page.locator("html").text_content()
         if not isinstance(text, str) or not text:
@@ -383,8 +400,11 @@ class CoreDataCdpCollector:
         started_at: datetime,
         merchant_identity: str | None,
     ) -> SnapshotDraft:
+        chart_trend: StoreChartTrend | None = None
         if adapter.data_source == "DOM":
-            await self._initial_trigger(page, adapter)()
+            chart_trend = await self._capture_store_chart_trend(
+                page, self._initial_trigger(page, adapter)
+            )
             captured_at = utc_now()
             if merchant_identity is None:
                 raise CollectionRejected("IDENTITY_UNVERIFIED", "DOM_STORE_IDENTITY_MISSING")
@@ -404,12 +424,20 @@ class CoreDataCdpCollector:
                 expected_business_date=scope.business_date,
                 observed_at=captured_at,
             )
+            chart_trend = parse_home_page_overview(main_raw)
         (
             metrics,
             sources,
             capture_method,
             source_updated_at,
         ) = await self._read_and_crosscheck_store_dom(page, adapter, parsed, scope, captured_at)
+        store_name = await self._read_store_name(page, adapter)
+        if store_name:
+            sources["store_name"] = "DOM"
+        if chart_trend is not None:
+            sources["chart_trend"] = "NETWORK_RESPONSE"
+            if capture_method == "DOM":
+                capture_method = "MIXED"
         window_end = source_updated_at or captured_at
         if window_end > captured_at + timedelta(minutes=5):
             raise CollectionRejected("TIME_SCOPE_UNVERIFIED", "SOURCE_UPDATE_TIME_IN_FUTURE")
@@ -440,7 +468,9 @@ class CoreDataCdpCollector:
             parser_version=adapter.parser_version,
             identity_evidence=self._identity_evidence(adapter, identity),
             field_sources=sources,
-            payload=StoreOverviewPayload(metrics=metrics).model_dump(mode="json"),
+            payload=StoreOverviewPayload(
+                metrics=metrics, store_name=store_name, chart_trend=chart_trend
+            ).model_dump(mode="json"),
             missing_fields=missing,
             quality=Quality(
                 status="VALID",
@@ -457,6 +487,128 @@ class CoreDataCdpCollector:
                 truncated=False,
             ),
         )
+
+    async def _capture_store_chart_trend(
+        self, page: Page, trigger: Trigger
+    ) -> StoreChartTrend | None:
+        """Best-effort capture of MMS home realtime trend; never fails the store collect."""
+        bodies: list[bytes] = []
+        tasks: set[asyncio.Task[None]] = set()
+
+        def _match(response: Response) -> bool:
+            parsed = urlsplit(response.url)
+            host = (parsed.hostname or "").casefold()
+            return (
+                "mms.pinduoduo.com" in host
+                and parsed.path == HOME_PAGE_OVERVIEW_PATH
+                and response.request.method == "POST"
+                and response.status == 200
+            )
+
+        async def consume(response: Response) -> None:
+            if not _match(response):
+                return
+            try:
+                raw = await response.body()
+            except Exception:
+                return
+            if len(raw) <= self.collection.max_browser_response_bytes:
+                bodies.append(raw)
+
+        def on_response(response: Response) -> None:
+            task = asyncio.create_task(consume(response))
+            tasks.add(task)
+            task.add_done_callback(tasks.discard)
+
+        page.on("response", on_response)
+        try:
+            # Realtime panel lazy-init is gated on tab visibility/rAF; in a background
+            # tab the panel never initializes and clicking refresh fires no XHR.
+            # 试验：暂不抢前台，观察后台标签页能否正常采到实时趋势。
+            # 若 bodies 一直为空 / 趋势采不到，再恢复下面的 bring_to_front。
+            # with suppress(Exception):
+            #     await page.bring_to_front()
+            await trigger()
+            with suppress(Exception):
+                await page.wait_for_load_state(
+                    "networkidle",
+                    timeout=min(12_000, self.collection.collection_timeout_ms),
+                )
+            # Realtime panel XHR usually appears only after clicking refresh
+            with suppress(Exception):
+                await page.evaluate(
+                    """() => {
+                      const el = [...document.querySelectorAll('*')].find((node) =>
+                        (node.innerText || '').includes('实时数据更新时间')
+                      );
+                      if (el) el.scrollIntoView({ block: 'center' });
+                    }"""
+                )
+            # First click can land while the panel still initializes; click at most
+            # twice, allowing a 4s response window after each click.
+            loop = asyncio.get_running_loop()
+            timeout_seconds = min(12.0, max(6.0, self.collection.collection_timeout_ms / 1000))
+            deadline = loop.time() + timeout_seconds
+            clicks = 0
+            while loop.time() < deadline and not bodies:
+                refresh = page.locator('[data-tracking-click-viewid="el_refresh_button"]').first
+                if clicks < 2:
+                    try:
+                        if await refresh.count() > 0:
+                            await refresh.click(force=True, timeout=5_000)
+                            clicks += 1
+                    except Exception:
+                        pass
+                wait_until = min(deadline, loop.time() + 4.0)
+                while loop.time() < wait_until and not bodies:
+                    await asyncio.sleep(0.25)
+            if tasks:
+                await asyncio.wait(tasks, timeout=2)
+        except Exception:
+            return None
+        finally:
+            page.remove_listener("response", on_response)
+            for task in list(tasks):
+                if not task.done():
+                    task.cancel()
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+        for raw in reversed(bodies):
+            trend = parse_home_page_overview(raw)
+            if trend is not None:
+                return trend
+        if bodies:
+            LOGGER.info("store_chart_trend: %s bodies captured but none parsed", len(bodies))
+        else:
+            LOGGER.info("store_chart_trend: homePageOverView response not observed")
+        return None
+
+    async def _read_store_name(
+        self, page: Page, adapter: StoreOverviewAdapterSettings
+    ) -> str | None:
+        """Best-effort mall display name from MMS chrome; never fails the whole collect."""
+        selector = (adapter.dom_store_name_selector or "").strip()
+        if not selector:
+            return None
+        try:
+            text = await read_locator_value(
+                page,
+                selector,
+                adapter.dom_store_name_attribute,
+                wait_timeout_ms=min(5_000, self.collection.collection_timeout_ms),
+                failure_status="DATA_MISMATCH",
+                failure_code="DOM_STORE_NAME_MISSING",
+            )
+        except CollectionRejected:
+            return None
+        cleaned = " ".join(text.split()).strip()
+        if not cleaned or cleaned in {"主账号", "子账号", "商家后台"}:
+            return None
+        # Header sometimes is "店名 主账号"; prefer the name leaf only.
+        if cleaned.endswith(" 主账号"):
+            cleaned = cleaned[: -len(" 主账号")].strip()
+        return cleaned[:64] or None
 
     async def _read_and_crosscheck_store_dom(
         self,

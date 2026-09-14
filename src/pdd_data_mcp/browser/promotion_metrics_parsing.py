@@ -249,6 +249,15 @@ def _parse_configuration(
     )
 
 
+def parse_report_effect_metrics(value: object) -> PromotedProductEffectMetrics:
+    """Parse a sumReport/reportInfo-style effect container with strict unit checks.
+
+    Shared by the promoted-product list rows and the account-level overview
+    report, whose metric objects use identical field names and unit envelopes.
+    """
+    return _parse_effect_metrics(value, source_name="REPORT_EFFECT_METRICS")
+
+
 def parse_promoted_product_response(
     raw: bytes,
     *,
@@ -332,4 +341,8 @@ def parse_promoted_product_response(
     )
 
 
-__all__ = ["ParsedPromotedProductResponse", "parse_promoted_product_response"]
+__all__ = [
+    "ParsedPromotedProductResponse",
+    "parse_promoted_product_response",
+    "parse_report_effect_metrics",
+]

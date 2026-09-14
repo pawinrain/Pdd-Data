@@ -107,7 +107,8 @@ class SyntheticCollector:
                         precision="EXACT",
                     ),
                     "order_count": None,
-                }
+                },
+                store_name="合成测试店",
             )
             return store_payload.model_dump(mode="json"), 1, ["order_count"]
         if dataset_type is DatasetType.PROMOTION_OVERVIEW:

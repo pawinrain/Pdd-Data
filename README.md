@@ -111,7 +111,7 @@ Python Client 完整实例见 `examples/demo_client.py`。它使用官方 SDK `C
 
 ## 阶段 C：真实只读采集
 
-真实配置模板是 `config/config.real.example.toml`。其中没有 Cookie、Token、账号或其他认证信息，真实数据目录 `real-data/`、运行元数据目录 `real-runtime/` 和本地真实配置都已排除 Git。服务不会启动、登录或关闭 Chrome。
+真实配置模板是 `config/config.real.example.toml`。其中没有 Cookie、Token、账号或其他认证信息，真实数据目录 `real-data/`、运行元数据目录 `real-runtime/` 和本地真实配置都已排除 Git。服务不会启动、登录或关闭 Chrome。默认情况下目标标签页缺失即返回 `TARGET_PAGE_NOT_FOUND`；在 `[collection]` 中显式设置 `auto_open_missing_pages = true` 后，服务可在已连接的专用 Chrome 中新建标签页并导航到配置内目标 URL（仍不启动浏览器、不新建 Context、不关闭标签页、不执行登录；新开页面同样检查登录/验证码/错误页）。
 
 每次新的真实运行仍须先取得用户对该轮只读范围的确认，并完成下面的人工准备：
 

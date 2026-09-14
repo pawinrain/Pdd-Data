@@ -935,12 +935,14 @@ def test_endpoint_or_dom_evidence_drift_is_rejected_before_connection(
     assert connector.connect_count == 0
 
 
-def test_page_query_is_rejected_and_session_only_disconnects(tmp_path: Path) -> None:
+def test_page_query_tab_is_not_reused_and_session_only_disconnects(tmp_path: Path) -> None:
+    # 带 query 的标签页不再被复用，因此失败形态从"复用后被 URL 断言拒绝"
+    # 变成"找不到干净的目标页面"。
     instance, page, session, _ = make_collector(tmp_path, Action([]))
     page.url = PAGE_URL + "?hidden=1"
 
     with pytest.raises(CollectionRejected) as caught:
         collect(instance, WindowKind.TODAY)
 
-    assert caught.value.error_code == "PROMOTION_ACCOUNT_PAGE_SCOPE_UNVERIFIED"
+    assert caught.value.error_code == "PROMOTION_ACCOUNT_PAGE_NOT_FOUND"
     assert session.disconnected is True

@@ -171,7 +171,7 @@ class PromotionMetricsCdpCollector:
         requested_window = self._validate_request(
             store_id, dataset_type, scope, adapter, current_date
         )
-        self._enforce_min_interval()
+        self._enforce_min_interval(dataset_type, scope.version)
         started_at = utc_now()
         session = await self.connector.connect(self.connection, self.collection.connect_timeout_ms)
         page: Page | None = None
@@ -372,6 +372,9 @@ class PromotionMetricsCdpCollector:
             captcha_selector=adapter.captcha_selector,
             error_selector=adapter.error_selector,
             page_code="PROMOTION_METRICS_PAGE",
+            auto_open=self.collection.auto_open_missing_pages,
+            open_timeout_ms=self.collection.page_open_timeout_ms,
+            require_clean_url=True,
         )
         parsed = urlsplit(page.url)
         if (
@@ -658,6 +661,24 @@ class PromotionMetricsCdpCollector:
                 for index, dom_row in enumerate(normalized_dom_rows)
                 if normalized_name in dom_row
             ]
+            # goodsName 偶发与列表展示标题(adName)不一致; 用商品 ID 做唯一兜底
+            if len(matches) != 1:
+                try:
+                    goods_id = read_object_path(item, adapter.platform_product_id_path)
+                except CollectionRejected as exc:
+                    raise CollectionRejected(
+                        "DATA_MISMATCH", "PROMOTION_NETWORK_DOM_PRODUCT_MISMATCH"
+                    ) from exc
+                goods_token = "".join(str(goods_id).split())
+                if not goods_token:
+                    raise CollectionRejected(
+                        "DATA_MISMATCH", "PROMOTION_NETWORK_DOM_PRODUCT_MISMATCH"
+                    )
+                matches = [
+                    index
+                    for index, dom_row in enumerate(normalized_dom_rows)
+                    if goods_token in dom_row
+                ]
             if len(matches) != 1 or matches[0] in matched_dom_indices:
                 raise CollectionRejected("DATA_MISMATCH", "PROMOTION_NETWORK_DOM_PRODUCT_MISMATCH")
             matched_dom_indices.add(matches[0])
@@ -827,10 +848,16 @@ class PromotionMetricsCdpCollector:
             response_field_path=adapter.identity_platform_store_id_path,
         )
 
-    def _enforce_min_interval(self) -> None:
+    def _enforce_min_interval(self, dataset_type: DatasetType, scope_version: str | None) -> None:
+        # Per connection+dataset+version: product_metrics and promotion_configuration both
+        # live in this collector and must be allowed back-to-back during one user sync.
         directory = safe_child(self.runtime_root, "rate_limits")
         directory.mkdir(parents=True, exist_ok=True)
-        path = safe_child(directory, f"{self.connection.connection_id}.json")
+        version_part = (scope_version or "none").replace("/", "_").replace("+", "-")
+        path = safe_child(
+            directory,
+            f"{self.connection.connection_id}__{dataset_type.value}__{version_part}.json",
+        )
         now = utc_now()
         if path.exists():
             try:
